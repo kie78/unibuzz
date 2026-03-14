@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:unibuzz/interfaces/comment_section.dart';
+import 'package:unibuzz/interfaces/full_screen_view.dart';
+import 'package:unibuzz/interfaces/report_screen.dart';
 
 class FeedScreen extends StatelessWidget {
   const FeedScreen({super.key});
@@ -89,11 +92,67 @@ class _BuzzCardState extends State<_BuzzCard> {
     });
   }
 
+  void _showOptionsMenu() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF1A1A1A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (BuildContext sheetContext) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.flag_outlined,
+                  color: Color(0xFFFF4D4D),
+                ),
+                title: const Text(
+                  'Report',
+                  style: TextStyle(color: Color(0xFFFF4D4D)),
+                ),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (BuildContext context) => const ReportScreen(),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () {
-        // TODO: Navigate to Full Screen View
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (BuildContext context) => FullScreenVideoView(
+              cardIndex: widget.index,
+              heroTag: 'video-card-${widget.index}',
+            ),
+          ),
+        );
       },
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -140,12 +199,14 @@ class _BuzzCardState extends State<_BuzzCard> {
               ),
             ),
             // Visual Asset: 16:9 Media Container
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 4),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Stack(
-                  children: [
+            Hero(
+              tag: 'video-card-${widget.index}',
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 4),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Stack(
+                    children: [
                     Container(
                       width: double.infinity,
                       height: 200,
@@ -177,6 +238,7 @@ class _BuzzCardState extends State<_BuzzCard> {
                   ],
                 ),
               ),
+            ),
             ),
             // Caption Area with Hashtags
             Padding(
@@ -265,42 +327,51 @@ class _BuzzCardState extends State<_BuzzCard> {
                       ),
                       const SizedBox(width: 8),
                       // Comments Pill
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0B0B0B),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: const [
-                            Icon(
-                              Icons.comment_outlined,
-                              size: 16,
-                              color: Colors.white,
-                            ),
-                            SizedBox(width: 8),
-                            Text(
-                              '342',
-                              style: TextStyle(
+                      GestureDetector(
+                        onTap: () {
+                          showModalBottomSheet<void>(
+                            context: context,
+                            builder: (BuildContext context) =>
+                                CommentSheet(cardIndex: widget.index),
+                            isScrollControlled: true,
+                            backgroundColor: Colors.transparent,
+                          );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0B0B0B),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              Icon(
+                                Icons.comment_outlined,
+                                size: 16,
                                 color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
                               ),
-                            ),
-                          ],
+                              SizedBox(width: 8),
+                              Text(
+                                '342',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                       const Spacer(),
                       // Options Icon
                       IconButton(
                         icon: const Icon(Icons.more_vert, color: Colors.white),
-                        onPressed: () {
-                          // TODO: Show options menu (report, share, save)
-                        },
+                        onPressed: _showOptionsMenu,
                         iconSize: 18,
                       ),
                     ],

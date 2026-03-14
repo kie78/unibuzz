@@ -4,6 +4,7 @@ import 'package:unibuzz/interfaces/account_screen.dart';
 import 'package:unibuzz/interfaces/create_screen.dart';
 import 'package:unibuzz/interfaces/discover_screen.dart';
 import 'package:unibuzz/interfaces/feed_screen.dart';
+import 'package:unibuzz/interfaces/login_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,7 +36,7 @@ class MyApp extends StatelessWidget {
         scaffoldBackgroundColor: const Color(0xFF0B0B0B),
         useMaterial3: true,
       ),
-      home: const PrimaryNavShell(),
+      home: const LoginScreen(),
     );
   }
 }

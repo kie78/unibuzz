@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:unibuzz/interfaces/login_screen.dart';
+import 'package:unibuzz/interfaces/my_posts_screen.dart';
 import 'package:unibuzz/interfaces/profile_screen.dart';
+import 'package:unibuzz/interfaces/report_screen.dart';
 
 class AccountScreen extends StatelessWidget {
   const AccountScreen({super.key, this.onBackPressed});
@@ -16,9 +19,11 @@ class AccountScreen extends StatelessWidget {
   }
 
   void _handleLogout(BuildContext context) {
-    // TODO: Implement logout functionality
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Logout functionality coming soon')),
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute<void>(
+        builder: (BuildContext context) => const LoginScreen(),
+      ),
+      (route) => false,
     );
   }
 
@@ -98,7 +103,12 @@ class AccountScreen extends StatelessWidget {
                         icon: Icons.videocam,
                         label: 'My Posts',
                         onTap: () {
-                          // TODO: Navigate to user posts screen
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (BuildContext context) =>
+                                  const MyPostsScreen(),
+                            ),
+                          );
                         },
                       ),
                       const Divider(
@@ -113,7 +123,12 @@ class AccountScreen extends StatelessWidget {
                         icon: Icons.flag,
                         label: 'Report',
                         onTap: () {
-                          // TODO: Navigate to report screen
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (BuildContext context) =>
+                                  const ReportScreen(),
+                            ),
+                          );
                         },
                         isLast: true,
                       ),
