@@ -1,0 +1,316 @@
+import 'package:flutter/material.dart';
+
+class FeedScreen extends StatelessWidget {
+  const FeedScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0B0B0B),
+      body: SafeArea(
+        child: CustomScrollView(
+          slivers: [
+            // Top Header
+            SliverAppBar(
+              backgroundColor: const Color(0xFF0B0B0B),
+              elevation: 0,
+              scrolledUnderElevation: 0,
+              pinned: true,
+              toolbarHeight: 56,
+              title: const Text(
+                'Unibuzz',
+                style: TextStyle(
+                  color: Color(0xFF00B4D8),
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              actions: [
+                Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: const Color(0xFF00B4D8),
+                        width: 2,
+                      ),
+                    ),
+                    child: const CircleAvatar(
+                      radius: 18,
+                      backgroundColor: Color(0xFF1A1A1A),
+                      child: Icon(
+                        Icons.person,
+                        color: Color(0xFF00B4D8),
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            // Feed Content Cards
+            SliverList(
+              delegate: SliverChildBuilderDelegate((
+                BuildContext context,
+                int index,
+              ) {
+                return _BuzzCard(index: index);
+              }, childCount: 10),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BuzzCard extends StatefulWidget {
+  final int index;
+
+  const _BuzzCard({required this.index});
+
+  @override
+  State<_BuzzCard> createState() => _BuzzCardState();
+}
+
+class _BuzzCardState extends State<_BuzzCard> {
+  int? _voteState; // null = no vote, 1 = upvote, -1 = downvote
+
+  void _handleUpvote() {
+    setState(() {
+      _voteState = _voteState == 1 ? null : 1;
+    });
+  }
+
+  void _handleDownvote() {
+    setState(() {
+      _voteState = _voteState == -1 ? null : -1;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        // TODO: Navigate to Full Screen View
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1A1A),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Card Header: Avatar, Username, University/Year
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  const CircleAvatar(
+                    radius: 20,
+                    backgroundColor: Color(0xFF00B4D8),
+                    child: Icon(Icons.person, color: Colors.white),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'User ${widget.index + 1}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const Text(
+                        'Stanford University • 3rd Year',
+                        style: TextStyle(
+                          color: Color(0xFF999999),
+                          fontSize: 12,
+                          fontWeight: FontWeight.normal,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            // Visual Asset: 16:9 Media Container
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Stack(
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      height: 200,
+                      color: const Color(0xFF0B0B0B),
+                    ),
+                    // Timestamp Overlay
+                    Positioned(
+                      bottom: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.7),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Text(
+                          '0:45',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // Caption Area with Hashtags
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    children: [
+                      Text(
+                        'Check out this amazing moment from campus! ',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.normal,
+                        ),
+                      ),
+                      Text(
+                        '#unibuzz',
+                        style: const TextStyle(
+                          color: Color(0xFF00B4D8),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(' ', style: const TextStyle(color: Colors.white)),
+                      Text(
+                        '#university',
+                        style: const TextStyle(
+                          color: Color(0xFF00B4D8),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  // Interaction Bar
+                  Row(
+                    children: [
+                      // Voting Pill
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0B0B0B),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            GestureDetector(
+                              onTap: _handleUpvote,
+                              child: Icon(
+                                Icons.arrow_upward,
+                                size: 16,
+                                color: _voteState == 1
+                                    ? const Color(0xFF00B4D8)
+                                    : Colors.white,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            const Text(
+                              '1.2k',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            GestureDetector(
+                              onTap: _handleDownvote,
+                              child: Icon(
+                                Icons.arrow_downward,
+                                size: 16,
+                                color: _voteState == -1
+                                    ? const Color(0xFF00B4D8)
+                                    : const Color(0xFF999999),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Comments Pill
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0B0B0B),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(
+                              Icons.comment_outlined,
+                              size: 16,
+                              color: Colors.white,
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              '342',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Spacer(),
+                      // Options Icon
+                      IconButton(
+                        icon: const Icon(Icons.more_vert, color: Colors.white),
+                        onPressed: () {
+                          // TODO: Show options menu (report, share, save)
+                        },
+                        iconSize: 18,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
