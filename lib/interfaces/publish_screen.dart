@@ -19,6 +19,12 @@ class _PublishScreenState extends State<PublishScreen> {
   bool _hasLoadError = false;
   late TextEditingController _captionController;
   late TextEditingController _hashtagController;
+  
+  // Upload state variables
+  bool _isUploading = false;
+  double _uploadProgress = 0.0;
+  String _uploadStatus = 'idle'; // idle, processing, uploading, completed, failed
+  String _uploadMessage = '';
 
   @override
   void initState() {
@@ -74,13 +80,66 @@ class _PublishScreenState extends State<PublishScreen> {
     return '$minutes:${seconds.toString().padLeft(2, '0')}';
   }
 
-  void _onSharePressed() {
+  Future<void> _onSharePressed() async {
+    if (_isUploading || _uploadStatus == 'completed') {
+      // If already completed, show success and close
+      if (_uploadStatus == 'completed') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Post published successfully!'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+        Navigator.of(context).pop();
+        return;
+      }
+      return; // Don't allow multiple uploads
+    }
+
+    setState(() {
+      _isUploading = true;
+      _uploadStatus = 'processing';
+      _uploadMessage = 'Processing video...';
+      _uploadProgress = 0.0;
+    });
+
+    // Simulate processing phase (1-2 seconds)
+    await Future.delayed(const Duration(seconds: 1));
+    if (!mounted) return;
+
+    setState(() {
+      _uploadStatus = 'uploading';
+      _uploadMessage = 'Uploading to server...';
+    });
+
+    // Simulate uploading with progress
+    for (int i = 0; i <= 10; i++) {
+      if (!mounted) return;
+      await Future.delayed(const Duration(milliseconds: 300));
+      setState(() {
+        _uploadProgress = i / 10;
+      });
+    }
+
+    // Simulate backend response
+    if (!mounted) return;
+    setState(() {
+      _uploadStatus = 'completed';
+      _uploadMessage = 'Upload complete!';
+      _uploadProgress = 1.0;
+    });
+
+    // Keep completed state for user feedback
+    await Future.delayed(const Duration(seconds: 2));
+    if (!mounted) return;
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Post published successfully!'),
         duration: Duration(seconds: 2),
       ),
     );
+    Navigator.of(context).pop();
   }
 
   void _onDiscardPressed() {
@@ -178,42 +237,71 @@ class _PublishScreenState extends State<PublishScreen> {
                       ),
                     ),
                   ),
-                  // Share Button
-                  GestureDetector(
-                    onTap: _onSharePressed,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                          color: const Color(0xFF00B4D8),
-                          width: 2,
+                  // Share Button or Upload Status
+                  if (_uploadStatus != 'completed')
+                    GestureDetector(
+                      onTap: _isUploading ? null : _onSharePressed,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
                         ),
-                        borderRadius: BorderRadius.circular(8),
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: _isUploading
+                                ? const Color(0xFF00B4D8).withValues(alpha: 0.5)
+                                : const Color(0xFF00B4D8),
+                            width: 2,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          _isUploading ? 'Uploading...' : 'Share',
+                          style: TextStyle(
+                            color: _isUploading
+                                ? const Color(0xFF00B4D8).withValues(alpha: 0.5)
+                                : const Color(0xFF00B4D8),
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                        ),
                       ),
-                      child: const Text(
-                        'Share',
-                        style: TextStyle(
-                          color: Color(0xFF00B4D8),
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
+                    )
+                  else
+                    GestureDetector(
+                      onTap: _onSharePressed,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF00B4D8),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text(
+                          'Done',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
                         ),
                       ),
                     ),
-                  ),
                 ],
               ),
             ),
             const SizedBox(height: 8),
             // Scrollable Content
             Expanded(
-              child: SingleChildScrollView(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Column(
-                    children: <Widget>[
+              child: Stack(
+                children: <Widget>[
+                  SingleChildScrollView(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Column(
+                        children: <Widget>[
                       // Media Preview Card
                       Center(
                         child: ConstrainedBox(
@@ -263,27 +351,56 @@ class _PublishScreenState extends State<PublishScreen> {
                                         children: <Widget>[
                                           // Video Player
                                           VideoPlayer(controller),
-                                          // Replay Icon
-                                          GestureDetector(
-                                            onTap: _togglePlayback,
-                                            child: Container(
-                                              width: 60,
-                                              height: 60,
-                                              decoration: BoxDecoration(
-                                                color: Colors.black.withValues(
-                                                  alpha: 0.5,
-                                                ),
-                                                shape: BoxShape.circle,
+                                          // Progress Indicator or Play/Pause Icon
+                                          if (_isUploading)
+                                            SizedBox(
+                                              width: 100,
+                                              height: 100,
+                                              child: Stack(
+                                                alignment: Alignment.center,
+                                                children: <Widget>[
+                                                  CircularProgressIndicator(
+                                                    value: _uploadProgress,
+                                                    strokeWidth: 5,
+                                                    valueColor:
+                                                        const AlwaysStoppedAnimation<Color>(
+                                                      Color(0xFF00B4D8),
+                                                    ),
+                                                    backgroundColor:
+                                                        const Color(0xFF333333),
+                                                  ),
+                                                  Text(
+                                                    '${(_uploadProgress * 100).toInt()}%',
+                                                    style: const TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize: 18,
+                                                      fontWeight: FontWeight.w700,
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
-                                              child: Icon(
-                                                controller.value.isPlaying
-                                                    ? Icons.pause
-                                                    : Icons.replay,
-                                                color: const Color(0xFF00B4D8),
-                                                size: 32,
+                                            )
+                                          else
+                                            GestureDetector(
+                                              onTap: _togglePlayback,
+                                              child: Container(
+                                                width: 60,
+                                                height: 60,
+                                                decoration: BoxDecoration(
+                                                  color: Colors.black.withValues(
+                                                    alpha: 0.5,
+                                                  ),
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: Icon(
+                                                  controller.value.isPlaying
+                                                      ? Icons.pause
+                                                      : Icons.replay,
+                                                  color: const Color(0xFF00B4D8),
+                                                  size: 32,
+                                                ),
                                               ),
                                             ),
-                                          ),
                                           // Progress Bar
                                           Positioned(
                                             bottom: 0,
@@ -478,9 +595,62 @@ class _PublishScreenState extends State<PublishScreen> {
                         ),
                       ),
                       const SizedBox(height: 32),
-                    ],
+                        ],
+                      ),
+                    ),
                   ),
-                ),
+                  // Upload Progress Overlay
+                  if (_isUploading)
+                    Container(
+                      color: Colors.black.withValues(alpha: 0.7),
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: <Widget>[
+                            // Circular Progress Indicator
+                            SizedBox(
+                              width: 120,
+                              height: 120,
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: <Widget>[
+                                  CircularProgressIndicator(
+                                    value: _uploadProgress,
+                                    strokeWidth: 6,
+                                    valueColor:
+                                        const AlwaysStoppedAnimation<Color>(
+                                      Color(0xFF00B4D8),
+                                    ),
+                                    backgroundColor: const Color(0xFF333333),
+                                  ),
+                                  // Progress Percentage
+                                  Text(
+                                    '${(_uploadProgress * 100).toInt()}%',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            // Status Message
+                            Text(
+                              _uploadMessage,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
             // Secondary Tool Actions (Bottom)

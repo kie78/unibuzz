@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:unibuzz/interfaces/login_screen.dart';
 import 'package:unibuzz/interfaces/my_posts_screen.dart';
 import 'package:unibuzz/interfaces/profile_screen.dart';
-import 'package:unibuzz/interfaces/report_screen.dart';
 
 class AccountScreen extends StatelessWidget {
   const AccountScreen({super.key, this.onBackPressed});
@@ -107,26 +106,6 @@ class AccountScreen extends StatelessWidget {
                             MaterialPageRoute<void>(
                               builder: (BuildContext context) =>
                                   const MyPostsScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                      const Divider(
-                        color: Color(0xFF2A2A2A),
-                        height: 1,
-                        indent: 16,
-                        endIndent: 16,
-                      ),
-                      // Report Item
-                      _buildSettingsItem(
-                        context,
-                        icon: Icons.flag,
-                        label: 'Report',
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (BuildContext context) =>
-                                  const ReportScreen(),
                             ),
                           );
                         },

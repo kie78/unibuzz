@@ -17,21 +17,21 @@ class _MyPostsScreenState extends State<MyPostsScreen> {
     _posts = [
       _PostItem(
         id: '1',
-        duration: '0:45',
+        timestamp: '2 hours ago',
         upvotes: 234,
         downvotes: 3,
         comments: 18,
       ),
       _PostItem(
         id: '2',
-        duration: '1:22',
+        timestamp: '5 hours ago',
         upvotes: 567,
         downvotes: 8,
         comments: 42,
       ),
       _PostItem(
         id: '3',
-        duration: '0:30',
+        timestamp: '1 day ago',
         upvotes: 89,
         downvotes: 1,
         comments: 5,
@@ -220,7 +220,7 @@ class _PostCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
-                    post.duration,
+                    post.timestamp,
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 12,
@@ -374,14 +374,14 @@ class _PostCard extends StatelessWidget {
 class _PostItem {
   _PostItem({
     required this.id,
-    required this.duration,
+    required this.timestamp,
     required this.upvotes,
     required this.downvotes,
     required this.comments,
   });
 
   final String id;
-  final String duration;
+  final String timestamp;
   final int upvotes;
   final int downvotes;
   final int comments;

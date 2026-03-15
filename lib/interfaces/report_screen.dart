@@ -262,42 +262,44 @@ class _ReportScreenState extends State<ReportScreen> {
                 }).toList(),
               ),
               const SizedBox(height: 28),
-              // Additional Details Section
-              Text(
-                'Additional Details',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
+              // Additional Details Section (only show when "Other" is selected)
+              if (_selectedReason == 'other') ...[
+                Text(
+                  'Additional Details',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _detailsController,
-                maxLines: 5,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w400,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'Provide more details (optional)...',
-                  hintStyle: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.4),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _detailsController,
+                  maxLines: 5,
+                  style: const TextStyle(
+                    color: Colors.white,
                     fontSize: 14,
+                    fontWeight: FontWeight.w400,
                   ),
-                  filled: true,
-                  fillColor: const Color(0xFF121212),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 14,
+                  decoration: InputDecoration(
+                    hintText: 'Provide more details (required)...',
+                    hintStyle: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.4),
+                      fontSize: 14,
+                    ),
+                    filled: true,
+                    fillColor: const Color(0xFF121212),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 28),
+                const SizedBox(height: 28),
+              ],
               // Submit Button
               SizedBox(
                 width: double.infinity,

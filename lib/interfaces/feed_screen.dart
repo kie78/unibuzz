@@ -212,7 +212,7 @@ class _BuzzCardState extends State<_BuzzCard> {
                       height: 200,
                       color: const Color(0xFF0B0B0B),
                     ),
-                    // Timestamp Overlay
+                  // Timestamp Overlay
                     Positioned(
                       bottom: 8,
                       right: 8,
@@ -226,7 +226,7 @@ class _BuzzCardState extends State<_BuzzCard> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Text(
-                          '0:45',
+                          '2 hours ago',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 10,

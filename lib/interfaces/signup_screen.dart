@@ -9,9 +9,11 @@ class SignupScreen extends StatefulWidget {
 }
 
 class _SignupScreenState extends State<SignupScreen> {
+  late TextEditingController _usernameController;
   late TextEditingController _fullNameController;
   late TextEditingController _emailController;
   late TextEditingController _courseController;
+  late TextEditingController _universityController;
   late TextEditingController _passwordController;
   String? _selectedYear;
   bool _isLoading = false;
@@ -27,17 +29,21 @@ class _SignupScreenState extends State<SignupScreen> {
   @override
   void initState() {
     super.initState();
+    _usernameController = TextEditingController();
     _fullNameController = TextEditingController();
     _emailController = TextEditingController();
     _courseController = TextEditingController();
+    _universityController = TextEditingController();
     _passwordController = TextEditingController();
   }
 
   @override
   void dispose() {
+    _usernameController.dispose();
     _fullNameController.dispose();
     _emailController.dispose();
     _courseController.dispose();
+    _universityController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -104,6 +110,16 @@ class _SignupScreenState extends State<SignupScreen> {
 
                 const SizedBox(height: 40),
 
+                // Username Input
+                _buildInputField(
+                  label: 'USERNAME',
+                  controller: _usernameController,
+                  hintText: 'jokello',
+                  enabled: !_isLoading,
+                ),
+
+                const SizedBox(height: 20),
+
                 // Full Name Input
                 _buildInputField(
                   label: 'FULL NAME',
@@ -130,6 +146,16 @@ class _SignupScreenState extends State<SignupScreen> {
                   label: 'COURSE OF STUDY',
                   controller: _courseController,
                   hintText: 'Computer Science',
+                  enabled: !_isLoading,
+                ),
+
+                const SizedBox(height: 20),
+
+                // University Name Input
+                _buildInputField(
+                  label: 'UNIVERSITY',
+                  controller: _universityController,
+                  hintText: 'Makerere University',
                   enabled: !_isLoading,
                 ),
 

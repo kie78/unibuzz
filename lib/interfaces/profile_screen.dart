@@ -18,6 +18,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final bool _isEmailVerified = true;
 
   String? _avatarPath;
+  String _username = 'jokello';
+  String _fullName = 'James Okello';
 
   ImageProvider<Object> _avatarImageProvider() {
     if (_avatarPath != null) {
@@ -208,7 +210,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(height: 20),
               Text(
-                'James Okello',
+                _username,
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   color: Colors.white,
@@ -224,6 +226,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 child: Column(
                   children: [
+                    _buildReadOnlyRow(
+                      context,
+                      icon: Icons.person,
+                      label: 'Full Name',
+                      value: _fullName,
+                    ),
+                    _buildDivider(),
                     _buildReadOnlyRow(
                       context,
                       icon: Icons.school,
