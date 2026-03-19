@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:unibuzz/main.dart';
+import 'package:unibuzz/services/auth_service.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -48,19 +49,60 @@ class _SignupScreenState extends State<SignupScreen> {
     super.dispose();
   }
 
-  void _handleSignup() {
-    setState(() => _isLoading = true);
-
-    // Simulate signup delay
-    Future.delayed(const Duration(milliseconds: 1500), () {
+  String? _signupError;
+  void _handleSignup() async {
+    setState(() {
+      _isLoading = true;
+      _signupError = null;
+    });
+    try {
+      if (_selectedYear == null) {
+        setState(() {
+          _signupError = 'Please select your year of study.';
+          _isLoading = false;
+        });
+        return;
+      }
+      // Map year string to int
+      int yearInt = _yearOptions.indexOf(_selectedYear!) + 1;
+      await AuthService.register(
+        fullName: _fullNameController.text.trim(),
+        username: _usernameController.text.trim(),
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+        universityName: _universityController.text.trim(),
+        course: _courseController.text.trim(),
+        yearOfStudy: yearInt,
+      );
+      await AuthService.cacheProfileSnapshot(<String, dynamic>{
+        'full_name': _fullNameController.text.trim(),
+        'username': _usernameController.text.trim(),
+        'email': _emailController.text.trim(),
+        'university_name': _universityController.text.trim(),
+        'course': _courseController.text.trim(),
+        'year_of_study': yearInt,
+      });
+      // After successful registration, perform login to obtain tokens
+      await AuthService.login(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
       if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
         Navigator.of(context).pushReplacement(
           MaterialPageRoute<void>(
             builder: (BuildContext context) => const PrimaryNavShell(),
           ),
         );
       }
-    });
+    } catch (e) {
+      setState(() {
+        _signupError = e.toString().replaceFirst('Exception: ', '');
+        _isLoading = false;
+      });
+    }
   }
 
   @override
@@ -307,6 +349,20 @@ class _SignupScreenState extends State<SignupScreen> {
                     ),
                   ),
                 ),
+
+                if (_signupError != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16.0),
+                    child: Text(
+                      _signupError!,
+                      style: const TextStyle(
+                        color: Color(0xFFFF4D4D),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
 
                 const SizedBox(height: 24),
 

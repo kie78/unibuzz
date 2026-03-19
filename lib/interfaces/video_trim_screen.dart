@@ -134,7 +134,7 @@ class _VideoTrimScreenState extends State<VideoTrimScreen> {
 
       if (widget.navigateToPublishOnSave) {
         await Navigator.of(context).pushReplacement(
-          MaterialPageRoute<void>(
+          MaterialPageRoute<bool>(
             builder: (BuildContext context) =>
                 PublishScreen(videoPath: outputPath),
           ),

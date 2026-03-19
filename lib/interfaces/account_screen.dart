@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:unibuzz/interfaces/comment_filters_screen.dart';
 import 'package:unibuzz/interfaces/login_screen.dart';
 import 'package:unibuzz/interfaces/my_posts_screen.dart';
 import 'package:unibuzz/interfaces/profile_screen.dart';
+import 'package:unibuzz/services/auth_service.dart';
 
 class AccountScreen extends StatelessWidget {
   const AccountScreen({super.key, this.onBackPressed});
@@ -17,8 +19,10 @@ class AccountScreen extends StatelessWidget {
     onBackPressed?.call();
   }
 
-  void _handleLogout(BuildContext context) {
-    Navigator.of(context).pushAndRemoveUntil(
+  void _handleLogout(BuildContext context) async {
+    final navigator = Navigator.of(context);
+    await AuthService.logout();
+    navigator.pushAndRemoveUntil(
       MaterialPageRoute<void>(
         builder: (BuildContext context) => const LoginScreen(),
       ),
@@ -106,6 +110,26 @@ class AccountScreen extends StatelessWidget {
                             MaterialPageRoute<void>(
                               builder: (BuildContext context) =>
                                   const MyPostsScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      const Divider(
+                        color: Color(0xFF2A2A2A),
+                        height: 1,
+                        indent: 16,
+                        endIndent: 16,
+                      ),
+                      // Comment Filters Item
+                      _buildSettingsItem(
+                        context,
+                        icon: Icons.filter_list,
+                        label: 'Comment Filters',
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (BuildContext context) =>
+                                  const CommentFiltersScreen(),
                             ),
                           );
                         },

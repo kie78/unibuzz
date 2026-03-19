@@ -17,6 +17,7 @@ class _CreateScreenState extends State<CreateScreen> {
   static const int _maxDurationSeconds = 20;
 
   final ImagePicker _imagePicker = ImagePicker();
+  List<CameraDescription> _availableCameras = <CameraDescription>[];
 
   CameraController? _cameraController;
   CameraLensDirection _activeLensDirection = CameraLensDirection.back;
@@ -24,7 +25,6 @@ class _CreateScreenState extends State<CreateScreen> {
 
   int _elapsedSeconds = 0;
   bool _isRecordingActive = false;
-  bool _isPaused = false;
   bool _isInitializingCamera = true;
   bool _isProcessingVideo = false;
   String? _readyVideoPath;
@@ -35,55 +35,93 @@ class _CreateScreenState extends State<CreateScreen> {
     _initializeCamera(_activeLensDirection);
   }
 
-  Future<void> _initializeCamera(CameraLensDirection lensDirection) async {
+  Future<List<CameraDescription>> _loadAvailableCameras() async {
+    if (_availableCameras.isNotEmpty) {
+      return _availableCameras;
+    }
+    _availableCameras = await availableCameras();
+    return _availableCameras;
+  }
+
+  Future<bool> _initializeCamera(
+    CameraLensDirection lensDirection, {
+    bool showUnavailableLensMessage = false,
+  }) async {
     try {
-      final List<CameraDescription> cameras = await availableCameras();
+      final List<CameraDescription> cameras = await _loadAvailableCameras();
       if (cameras.isEmpty) {
-        if (!mounted) return;
+        if (!mounted) return false;
         setState(() {
           _isInitializingCamera = false;
         });
         _showToast('No camera found on this device.');
-        return;
+        return false;
       }
 
-      final CameraDescription selectedCamera = cameras.firstWhere(
-        (CameraDescription camera) => camera.lensDirection == lensDirection,
-        orElse: () => cameras.first,
-      );
+      CameraDescription? selectedCamera;
+      for (final CameraDescription camera in cameras) {
+        if (camera.lensDirection == lensDirection) {
+          selectedCamera = camera;
+          break;
+        }
+      }
+
+      if (selectedCamera == null) {
+        if (!mounted) {
+          return false;
+        }
+        setState(() {
+          _isInitializingCamera = false;
+        });
+
+        if (showUnavailableLensMessage) {
+          _showToast(
+            lensDirection == CameraLensDirection.front
+                ? 'Front camera is not available on this device.'
+                : 'Rear camera is not available on this device.',
+          );
+        }
+        return false;
+      }
+
+      final CameraDescription targetCamera = selectedCamera;
 
       final CameraController? previousController = _cameraController;
       final CameraController controller = CameraController(
-        selectedCamera,
+        targetCamera,
         ResolutionPreset.high,
         enableAudio: true,
       );
 
-      await controller.initialize();
       await previousController?.dispose();
+      await controller.initialize();
 
       if (!mounted) {
         await controller.dispose();
-        return;
+        return false;
       }
 
       setState(() {
         _cameraController = controller;
-        _activeLensDirection = selectedCamera.lensDirection;
+        _activeLensDirection = targetCamera.lensDirection;
         _isInitializingCamera = false;
       });
+
+      return true;
     } on CameraException catch (error) {
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
         _isInitializingCamera = false;
       });
       _showToast('Camera access failed: ${error.description ?? error.code}');
+      return false;
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
         _isInitializingCamera = false;
       });
       _showToast('Camera initialization failed: $error');
+      return false;
     }
   }
 
@@ -97,7 +135,16 @@ class _CreateScreenState extends State<CreateScreen> {
   }
 
   Future<void> _toggleCamera() async {
-    if (_isInitializingCamera || _isProcessingVideo) return;
+    if (_isInitializingCamera) {
+      _showToast('Camera is still initializing. Please wait.');
+      return;
+    }
+
+    if (_isProcessingVideo) {
+      _showToast('Please wait while video processing is in progress.');
+      return;
+    }
+
     if (_isRecordingActive) {
       _showToast('Pause or publish current recording before flipping camera.');
       return;
@@ -112,9 +159,13 @@ class _CreateScreenState extends State<CreateScreen> {
       _isInitializingCamera = true;
     });
 
-    await _initializeCamera(nextLensDirection);
+    final bool switched = await _initializeCamera(
+      nextLensDirection,
+      showUnavailableLensMessage: true,
+    );
 
-    if (!mounted) return;
+    if (!mounted || !switched) return;
+
     _showToast(
       _activeLensDirection == CameraLensDirection.front
           ? 'Front camera active'
@@ -164,7 +215,6 @@ class _CreateScreenState extends State<CreateScreen> {
       if (!mounted) return;
       setState(() {
         _isRecordingActive = true;
-        _isPaused = false;
         _elapsedSeconds = 0;
         _readyVideoPath = null;
       });
@@ -173,48 +223,6 @@ class _CreateScreenState extends State<CreateScreen> {
     } on CameraException catch (error) {
       _showToast(
         'Unable to start recording: ${error.description ?? error.code}',
-      );
-    }
-  }
-
-  Future<void> _pauseRecording() async {
-    final CameraController? controller = _cameraController;
-    if (controller == null || !controller.value.isRecordingVideo) return;
-    if (controller.value.isRecordingPaused) return;
-
-    try {
-      await controller.pauseVideoRecording();
-      _recordingTimer?.cancel();
-
-      if (!mounted) return;
-      setState(() {
-        _isPaused = true;
-      });
-      _showToast('Recording paused');
-    } on CameraException catch (error) {
-      _showToast(
-        'Unable to pause recording: ${error.description ?? error.code}',
-      );
-    }
-  }
-
-  Future<void> _resumeRecording() async {
-    final CameraController? controller = _cameraController;
-    if (controller == null || !controller.value.isRecordingVideo) return;
-    if (!controller.value.isRecordingPaused) return;
-
-    try {
-      await controller.resumeVideoRecording();
-
-      if (!mounted) return;
-      setState(() {
-        _isPaused = false;
-      });
-      _startProgressTimer();
-      _showToast('Recording resumed');
-    } on CameraException catch (error) {
-      _showToast(
-        'Unable to resume recording: ${error.description ?? error.code}',
       );
     }
   }
@@ -251,7 +259,6 @@ class _CreateScreenState extends State<CreateScreen> {
       if (!mounted) return;
       setState(() {
         _isRecordingActive = false;
-        _isPaused = false;
       });
 
       _showToast('Max video length is 20 seconds.');
@@ -298,7 +305,6 @@ class _CreateScreenState extends State<CreateScreen> {
     if (!mounted) return;
     setState(() {
       _isRecordingActive = false;
-      _isPaused = false;
       _isProcessingVideo = false;
       _elapsedSeconds = 0;
       _readyVideoPath = null;
@@ -342,12 +348,7 @@ class _CreateScreenState extends State<CreateScreen> {
       return;
     }
 
-    if (_isPaused) {
-      await _resumeRecording();
-      return;
-    }
-
-    await _pauseRecording();
+    await _stopRecording(openTrimTool: true);
   }
 
   Future<void> _navigateToPublish() async {
@@ -364,12 +365,17 @@ class _CreateScreenState extends State<CreateScreen> {
       return;
     }
 
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (BuildContext context) =>
-            PublishScreen(videoPath: _readyVideoPath!),
-      ),
-    );
+    try {
+      await Navigator.of(context).push<bool>(
+        MaterialPageRoute<bool>(
+          builder: (BuildContext context) =>
+              PublishScreen(videoPath: _readyVideoPath!),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      _showToast('Unable to open publish flow: $error');
+    }
   }
 
   Future<void> _handleClose() async {
@@ -412,7 +418,19 @@ class _CreateScreenState extends State<CreateScreen> {
 
     final Size? previewSize = controller.value.previewSize;
     if (previewSize == null) {
-      return const SizedBox.shrink();
+      final double fallbackAspectRatio = controller.value.aspectRatio == 0
+          ? (9 / 16)
+          : controller.value.aspectRatio;
+
+      return Center(
+        child: AspectRatio(
+          aspectRatio: fallbackAspectRatio,
+          child: CameraPreview(
+            controller,
+            key: ValueKey<int>(controller.hashCode),
+          ),
+        ),
+      );
     }
 
     return SizedBox.expand(
@@ -421,7 +439,10 @@ class _CreateScreenState extends State<CreateScreen> {
         child: SizedBox(
           width: previewSize.height,
           height: previewSize.width,
-          child: CameraPreview(controller),
+          child: CameraPreview(
+            controller,
+            key: ValueKey<int>(controller.hashCode),
+          ),
         ),
       ),
     );
@@ -548,7 +569,7 @@ class _CreateScreenState extends State<CreateScreen> {
                     ),
                     child: Text(
                       _isRecordingActive
-                          ? (_isPaused ? 'PAUSED' : 'REC')
+                          ? 'REC'
                           : (_readyVideoPath != null ? 'READY' : 'REC'),
                       style: const TextStyle(
                         color: Colors.black,
@@ -577,15 +598,17 @@ class _CreateScreenState extends State<CreateScreen> {
                         Container(
                           width: 64,
                           height: 64,
-                          decoration: const BoxDecoration(
+                          decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: Colors.white,
+                            color: _isRecordingActive
+                                ? const Color(0xFF00B4D8)
+                                : Colors.white,
                           ),
-                          child: _isPaused
+                          child: _isRecordingActive
                               ? const Icon(
-                                  Icons.play_arrow,
-                                  color: Color(0xFF00B4D8),
-                                  size: 32,
+                                  Icons.stop,
+                                  color: Colors.white,
+                                  size: 28,
                                 )
                               : null,
                         ),

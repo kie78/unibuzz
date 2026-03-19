@@ -5,6 +5,7 @@ import 'package:unibuzz/interfaces/create_screen.dart';
 import 'package:unibuzz/interfaces/discover_screen.dart';
 import 'package:unibuzz/interfaces/feed_screen.dart';
 import 'package:unibuzz/interfaces/login_screen.dart';
+import 'package:unibuzz/services/auth_service.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,8 +21,30 @@ void main() {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  Widget? _home;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAuth();
+  }
+
+  Future<void> _checkAuth() async {
+    final hasValidToken = await AuthService.hasValidAccessToken();
+    if (!mounted) return;
+
+    setState(() {
+      _home = hasValidToken ? const PrimaryNavShell() : const LoginScreen();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +59,7 @@ class MyApp extends StatelessWidget {
         scaffoldBackgroundColor: const Color(0xFF0B0B0B),
         useMaterial3: true,
       ),
-      home: const LoginScreen(),
+      home: _home ?? const SizedBox.shrink(),
     );
   }
 }

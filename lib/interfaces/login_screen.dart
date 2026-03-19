@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:unibuzz/interfaces/signup_screen.dart';
 import 'package:unibuzz/main.dart';
+import 'package:unibuzz/services/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -31,15 +32,19 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _handleLogin() {
+  String? _loginError;
+  void _handleLogin() async {
     setState(() {
       _emailError = null;
       _passwordError = null;
+      _loginError = null;
       _isLoading = true;
     });
-
-    // Simulate login delay
-    Future.delayed(const Duration(milliseconds: 1500), () {
+    try {
+      await AuthService.login(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
       if (mounted) {
         setState(() => _isLoading = false);
         Navigator.of(context).pushReplacement(
@@ -48,7 +53,18 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         );
       }
-    });
+    } catch (e) {
+      String error = e.toString().replaceFirst('Exception: ', '');
+      setState(() {
+        _isLoading = false;
+        if (error.toLowerCase().contains('invalid') || error.toLowerCase().contains('credentials')) {
+          _emailError = 'Invalid email or password';
+          _passwordError = 'Invalid email or password';
+        } else {
+          _loginError = error;
+        }
+      });
+    }
   }
 
   @override
@@ -280,6 +296,20 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                 ),
+
+                if (_loginError != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16.0),
+                    child: Text(
+                      _loginError!,
+                      style: const TextStyle(
+                        color: Color(0xFFFF4D4D),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
 
                 const SizedBox(height: 24),
 
