@@ -3,8 +3,7 @@ import 'dart:async';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:unibuzz/interfaces/publish_screen.dart';
-import 'package:unibuzz/interfaces/video_trim_screen.dart';
+import 'package:unibuzz/interfaces/video_upload_screen.dart';
 
 class CreateScreen extends StatefulWidget {
   const CreateScreen({super.key});
@@ -227,18 +226,6 @@ class _CreateScreenState extends State<CreateScreen> {
     }
   }
 
-  Future<String?> _openTrimTool(String videoPath) async {
-    if (!mounted) return null;
-    return Navigator.of(context).push<String>(
-      MaterialPageRoute<String>(
-        builder: (BuildContext context) => VideoTrimScreen(
-          videoPath: videoPath,
-          maxDurationSeconds: _maxDurationSeconds,
-        ),
-      ),
-    );
-  }
-
   Future<void> _stopRecording({required bool openTrimTool}) async {
     final CameraController? controller = _cameraController;
     if (controller == null ||
@@ -263,18 +250,13 @@ class _CreateScreenState extends State<CreateScreen> {
 
       _showToast('Max video length is 20 seconds.');
 
-      String? outputPath = capturedVideo.path;
-      if (openTrimTool) {
-        outputPath = await _openTrimTool(capturedVideo.path);
-      }
+      final outputPath = capturedVideo.path;
 
       if (!mounted) return;
-      if (outputPath != null) {
-        setState(() {
-          _readyVideoPath = outputPath;
-        });
-        _showToast('Video ready to publish');
-      }
+      setState(() {
+        _readyVideoPath = outputPath;
+      });
+      _showToast('Video ready to publish');
     } on CameraException catch (error) {
       if (!mounted) return;
       _showToast(
@@ -325,15 +307,12 @@ class _CreateScreenState extends State<CreateScreen> {
 
       if (!mounted || selectedVideo == null) return;
 
-      _showToast('Max video length is 20 seconds. Trim before publishing.');
-
-      final String? trimmedPath = await _openTrimTool(selectedVideo.path);
-      if (!mounted || trimmedPath == null) return;
-
-      setState(() {
-        _readyVideoPath = trimmedPath;
-      });
-      _showToast('Video ready to publish');
+      await Navigator.of(context).push<bool>(
+        MaterialPageRoute<bool>(
+          builder: (_) =>
+              VideoUploadScreen(initialVideoPath: selectedVideo.path),
+        ),
+      );
     } catch (error) {
       if (!mounted) return;
       _showToast('Unable to access gallery: $error');
@@ -360,16 +339,10 @@ class _CreateScreenState extends State<CreateScreen> {
 
     if (!mounted) return;
 
-    if (_readyVideoPath == null) {
-      _showToast('Capture or select a video first.');
-      return;
-    }
-
     try {
       await Navigator.of(context).push<bool>(
         MaterialPageRoute<bool>(
-          builder: (BuildContext context) =>
-              PublishScreen(videoPath: _readyVideoPath!),
+          builder: (_) => VideoUploadScreen(initialVideoPath: _readyVideoPath),
         ),
       );
     } catch (error) {

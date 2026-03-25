@@ -2,9 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:unibuzz/services/auth_service.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -17,10 +18,6 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   static const String _avatarHeroTag = 'profile-avatar';
   static const String _defaultAvatarUrl = 'https://i.pravatar.cc/400?img=12';
-  static const String _bundledCloudinaryCloudName = '';
-  static const String _bundledCloudinaryUploadPreset = '';
-  static const String _bundledCloudinaryApiKey = '';
-  static const String _bundledCloudinaryApiSecret = '';
 
   final ImagePicker _imagePicker = ImagePicker();
 
@@ -58,25 +55,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Map<String, String> _resolveCloudinaryConfig() {
-    const defineCloudName = String.fromEnvironment('CLOUDINARY_CLOUD_NAME');
-    const defineUploadPreset = String.fromEnvironment(
-      'CLOUDINARY_UPLOAD_PRESET',
-    );
-    const defineApiKey = String.fromEnvironment('CLOUDINARY_API_KEY');
-    const defineApiSecret = String.fromEnvironment('CLOUDINARY_API_SECRET');
-
-    final cloudName = defineCloudName.isNotEmpty
-        ? defineCloudName
-        : _bundledCloudinaryCloudName;
-    final uploadPreset = defineUploadPreset.isNotEmpty
-        ? defineUploadPreset
-        : _bundledCloudinaryUploadPreset;
-    final apiKey = defineApiKey.isNotEmpty
-        ? defineApiKey
-        : _bundledCloudinaryApiKey;
-    final apiSecret = defineApiSecret.isNotEmpty
-        ? defineApiSecret
-        : _bundledCloudinaryApiSecret;
+    final cloudName = dotenv.env['CLOUDINARY_CLOUD_NAME'] ?? '';
+    final uploadPreset = dotenv.env['CLOUDINARY_UPLOAD_PRESET'] ?? '';
+    final apiKey = dotenv.env['CLOUDINARY_API_KEY'] ?? '';
+    final apiSecret = dotenv.env['CLOUDINARY_API_SECRET'] ?? '';
 
     if (cloudName.isEmpty) {
       throw Exception(
@@ -132,16 +114,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     for (int attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        final uri = Uri.parse(
-          'https://api.cloudinary.com/v1_1/$cloudName/image/upload',
+        final cloudinaryDio = Dio(
+          BaseOptions(validateStatus: (_) => true),
         );
-        final request = http.MultipartRequest('POST', uri);
+        final fields = <String, dynamic>{};
 
         if (uploadMode == 'unsigned') {
           if (uploadPreset == null || uploadPreset.isEmpty) {
             throw Exception('Missing Cloudinary upload preset.');
           }
-          request.fields['upload_preset'] = uploadPreset;
+          fields['upload_preset'] = uploadPreset;
         } else {
           if (apiKey == null || apiKey.isEmpty) {
             throw Exception('Missing Cloudinary API key.');
@@ -152,24 +134,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           final timestamp =
               DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
-          request.fields['timestamp'] = timestamp.toString();
-          request.fields['api_key'] = apiKey;
-          request.fields['signature'] = _buildCloudinarySignature(
+          fields['timestamp'] = timestamp.toString();
+          fields['api_key'] = apiKey;
+          fields['signature'] = _buildCloudinarySignature(
             timestamp: timestamp,
             apiSecret: apiSecret,
           );
         }
 
-        request.files.add(await http.MultipartFile.fromPath('file', imagePath));
+        fields['file'] = await MultipartFile.fromFile(imagePath);
+        final formData = FormData.fromMap(fields);
 
-        final streamedResponse = await request.send();
-        final response = await http.Response.fromStream(streamedResponse);
+        final response = await cloudinaryDio.post<dynamic>(
+          'https://api.cloudinary.com/v1_1/$cloudName/image/upload',
+          data: formData,
+        );
 
-        final dynamic decoded = response.body.isNotEmpty
-            ? jsonDecode(response.body)
-            : null;
+        final dynamic decoded = response.data;
+        final int statusCode = response.statusCode ?? 0;
 
-        if (response.statusCode < 200 || response.statusCode >= 300) {
+        if (statusCode < 200 || statusCode >= 300) {
           String? cloudinaryMessage;
           if (decoded is Map && decoded['error'] is Map) {
             final dynamic message = decoded['error']['message'];
@@ -179,14 +163,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
           }
 
           final nonRetryable =
-              response.statusCode >= 400 &&
-              response.statusCode < 500 &&
-              response.statusCode != 408 &&
-              response.statusCode != 429;
+              statusCode >= 400 &&
+              statusCode < 500 &&
+              statusCode != 408 &&
+              statusCode != 429;
 
           final message =
               cloudinaryMessage ??
-              'Cloud upload failed with status ${response.statusCode}.';
+              'Cloud upload failed with status $statusCode.';
 
           if (nonRetryable) {
             throw Exception(message);

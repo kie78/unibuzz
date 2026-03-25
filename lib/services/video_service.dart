@@ -1,9 +1,8 @@
 import 'dart:io';
-import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
-import 'package:unibuzz/services/auth_service.dart';
+import 'package:unibuzz/services/api_client.dart';
 
 class VideoCommentsResponse {
   const VideoCommentsResponse({
@@ -16,83 +15,7 @@ class VideoCommentsResponse {
 }
 
 class VideoService {
-  static const String _defaultBaseUrl = 'https://unibuzz-api.onrender.com';
-  static http.Client _httpClient = http.Client();
-  static String? _baseUrlForTesting;
-  static bool _refreshEndpointUnavailable = false;
-
-  static String get _baseUrl => _baseUrlForTesting ?? _defaultBaseUrl;
-
-  @visibleForTesting
-  static void configureForTesting({http.Client? httpClient, String? baseUrl}) {
-    if (httpClient != null) {
-      _httpClient = httpClient;
-    }
-    _baseUrlForTesting = baseUrl;
-  }
-
-  @visibleForTesting
-  static void resetForTesting() {
-    _httpClient = http.Client();
-    _baseUrlForTesting = null;
-    _refreshEndpointUnavailable = false;
-  }
-
-  static String _normalizeAccessToken(String rawToken) {
-    String token = rawToken.trim();
-    if (token.toLowerCase().startsWith('bearer ')) {
-      token = token.substring(7).trim();
-    }
-    if (token.length >= 2 && token.startsWith('"') && token.endsWith('"')) {
-      token = token.substring(1, token.length - 1).trim();
-    }
-    return token;
-  }
-
-  static Future<Map<String, String>> _buildAuthHeaders() async {
-    final accessToken = await AuthService.getAccessToken();
-    if (accessToken == null || accessToken.isEmpty) {
-      throw Exception('Session expired. Please log in again.');
-    }
-
-    final normalizedToken = _normalizeAccessToken(accessToken);
-    if (normalizedToken.isEmpty || !normalizedToken.contains('.')) {
-      throw Exception('Session expired. Please log in again.');
-    }
-
-    return <String, String>{
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer $normalizedToken',
-    };
-  }
-
-  static Future<Map<String, String>> _buildHeadersWithOptionalAuth() async {
-    final accessToken = await AuthService.getAccessToken();
-    final baseHeaders = <String, String>{'Content-Type': 'application/json'};
-
-    if (accessToken == null || accessToken.trim().isEmpty) {
-      return baseHeaders;
-    }
-
-    final normalizedToken = _normalizeAccessToken(accessToken);
-    if (normalizedToken.isEmpty || !normalizedToken.contains('.')) {
-      return baseHeaders;
-    }
-
-    return <String, String>{
-      ...baseHeaders,
-      'Authorization': 'Bearer $normalizedToken',
-    };
-  }
-
-  static dynamic _decodeBody(String body) {
-    if (body.isEmpty) return null;
-    try {
-      return jsonDecode(body);
-    } catch (_) {
-      return body;
-    }
-  }
+  static Dio get _dio => ApiClient.instance.dio;
 
   static String _extractErrorMessage({
     required dynamic decoded,
@@ -192,19 +115,16 @@ class VideoService {
   }
 
   /// Applies Cloudinary adaptive quality and format transforms to a video URL.
-  /// Transforms: q_auto (adaptive quality), f_auto (best format), h_720,c_limit (720p max).
   static String _applyCloudinaryTransforms(String url) {
     if (!url.contains('cloudinary')) {
       return url;
     }
-    // Insert transforms after /video/upload/
     return url.replaceFirst(
       '/video/upload/',
       '/video/upload/q_auto,f_auto,h_720,c_limit/',
     );
   }
 
-  /// Post-processes video items to apply Cloudinary transforms and normalize URLs.
   static List<dynamic> _processVideoList(List<dynamic> videos) {
     return videos.map((dynamic item) {
       if (item is! Map<String, dynamic>) {
@@ -215,20 +135,24 @@ class VideoService {
         video['video_url'] = _applyCloudinaryTransforms(video['video_url']);
       }
       if (video['thumbnail_url'] is String) {
-        video['thumbnail_url'] = _applyCloudinaryTransforms(video['thumbnail_url']);
+        video['thumbnail_url'] =
+            _applyCloudinaryTransforms(video['thumbnail_url']);
       }
       return video;
     }).toList();
   }
 
-  /// Applies Cloudinary transforms to video_url and thumbnail_url in a status response.
-  static Map<String, dynamic> _processStatusResponse(Map<String, dynamic> response) {
+  static Map<String, dynamic> _processStatusResponse(
+    Map<String, dynamic> response,
+  ) {
     final processed = Map<String, dynamic>.from(response);
     if (processed['video_url'] is String) {
-      processed['video_url'] = _applyCloudinaryTransforms(processed['video_url']);
+      processed['video_url'] =
+          _applyCloudinaryTransforms(processed['video_url']);
     }
     if (processed['thumbnail_url'] is String) {
-      processed['thumbnail_url'] = _applyCloudinaryTransforms(processed['thumbnail_url']);
+      processed['thumbnail_url'] =
+          _applyCloudinaryTransforms(processed['thumbnail_url']);
     }
     return processed;
   }
@@ -276,86 +200,16 @@ class VideoService {
     );
   }
 
-  static Future<http.Response> _sendAuthenticated(
-    Future<http.Response> Function(Map<String, String> headers) sender,
-  ) async {
-    Map<String, String> headers = await _buildAuthHeaders();
-    http.Response response = await sender(headers);
-
-    if (response.statusCode != 401) {
-      return response;
-    }
-
-    // The deployed backend may not expose /auth/refresh; if unavailable,
-    // clear stale tokens and force re-authentication.
-    if (!_refreshEndpointUnavailable) {
-      try {
-        await AuthService.refreshAccessToken();
-        headers = await _buildAuthHeaders();
-        response = await sender(headers);
-        if (response.statusCode != 401) {
-          return response;
-        }
-      } catch (e) {
-        if (e.toString().contains('404')) {
-          _refreshEndpointUnavailable = true;
-        }
+  static Map<String, dynamic> _processResponse(Response<dynamic> response) {
+    final dynamic data = response.data;
+    final int statusCode = response.statusCode ?? 0;
+    if (statusCode >= 200 && statusCode < 300) {
+      if (data is Map<String, dynamic>) {
+        return data;
       }
+      return <String, dynamic>{'data': data};
     }
-
-    await AuthService.logout();
-    throw Exception('Session expired. Please log in again.');
-  }
-
-  static Future<http.Response> _sendWithOptionalAuth(
-    Future<http.Response> Function(Map<String, String> headers) sender,
-  ) async {
-    final unauthenticatedHeaders = <String, String>{
-      'Content-Type': 'application/json',
-    };
-
-    Map<String, String> headers = await _buildHeadersWithOptionalAuth();
-    final hadAuth = headers.containsKey('Authorization');
-
-    http.Response response = await sender(headers);
-    if (response.statusCode < 400) {
-      return response;
-    }
-
-    if ((response.statusCode == 401 || response.statusCode == 403) && hadAuth) {
-      try {
-        await AuthService.refreshAccessToken();
-        headers = await _buildHeadersWithOptionalAuth();
-        if (headers.containsKey('Authorization')) {
-          response = await sender(headers);
-          if (response.statusCode < 400) {
-            return response;
-          }
-        }
-      } catch (_) {
-        // Ignore refresh failure for optional-auth endpoints; try anonymous.
-      }
-
-      // Some deployed environments expose these read endpoints publicly.
-      response = await sender(unauthenticatedHeaders);
-    }
-
-    return response;
-  }
-
-  static Map<String, dynamic> _processResponse(http.Response response) {
-    final dynamic decoded = _decodeBody(response.body);
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      if (decoded is Map<String, dynamic>) {
-        return decoded;
-      }
-      return <String, dynamic>{'data': decoded};
-    }
-    final String message = _extractErrorMessage(
-      decoded: decoded,
-      statusCode: response.statusCode,
-    );
-    throw Exception(message);
+    throw Exception(_extractErrorMessage(decoded: data, statusCode: statusCode));
   }
 
   /// GET /api/feed
@@ -365,21 +219,20 @@ class VideoService {
       if (limit != null && limit > 0) 'limit': limit.toString(),
     };
 
-    final uri = Uri.parse('$_baseUrl/api/feed').replace(
+    final response = await _dio.get<dynamic>(
+      '/api/feed',
       queryParameters: queryParameters.isEmpty ? null : queryParameters,
     );
-    final response = await _sendAuthenticated(
-      (headers) => _httpClient.get(uri, headers: headers),
-    );
-    final dynamic decoded = _decodeBody(response.body);
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      if (decoded is List<dynamic>) {
-        return _processVideoList(decoded);
+    final dynamic data = response.data;
+    final int statusCode = response.statusCode ?? 0;
+    if (statusCode >= 200 && statusCode < 300) {
+      if (data is List<dynamic>) {
+        return _processVideoList(data);
       }
       return <dynamic>[];
     }
     throw Exception(
-      _extractErrorMessage(decoded: decoded, statusCode: response.statusCode),
+      _extractErrorMessage(decoded: data, statusCode: statusCode),
     );
   }
 
@@ -395,21 +248,21 @@ class VideoService {
     if (username != null && username.trim().isNotEmpty) {
       queryParameters['username'] = username.trim();
     }
-    final uri = Uri.parse(
-      '$_baseUrl/api/search',
-    ).replace(queryParameters: queryParameters);
-    final response = await _httpClient.get(uri);
-    final dynamic decoded = response.body.isNotEmpty
-        ? jsonDecode(response.body)
-        : null;
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      if (decoded is List<dynamic>) {
-        return _processVideoList(decoded);
+
+    final response = await _dio.get<dynamic>(
+      '/api/search',
+      queryParameters: queryParameters,
+    );
+    final dynamic data = response.data;
+    final int statusCode = response.statusCode ?? 0;
+    if (statusCode >= 200 && statusCode < 300) {
+      if (data is List<dynamic>) {
+        return _processVideoList(data);
       }
       return <dynamic>[];
     }
-    if (decoded is Map<String, dynamic>) {
-      throw Exception(decoded['message'] ?? 'Search failed');
+    if (data is Map<String, dynamic>) {
+      throw Exception(data['message'] ?? 'Search failed');
     }
     throw Exception('Search failed');
   }
@@ -426,19 +279,15 @@ class VideoService {
         'caption': caption.trim(),
       if (tags != null && tags.isNotEmpty) 'tags': tags.join(','),
     };
-    final uri = Uri.parse(
-      '$_baseUrl/api/videos/upload',
-    ).replace(queryParameters: queryParameters);
-    final response = await _sendAuthenticated(
-      (headers) => _httpClient.post(uri, headers: headers),
+    final response = await _dio.post<dynamic>(
+      '/api/videos/upload',
+      queryParameters: queryParameters,
     );
     final uploadResponse = _processResponse(response);
     return _processStatusResponse(uploadResponse);
   }
 
   /// Attempts authenticated source-file upload via backend proxy endpoint.
-  ///
-  /// The backend should return a publicly reachable URL for `input_url`.
   static Future<String> uploadSourceVideoFile({
     required String filePath,
   }) async {
@@ -460,42 +309,29 @@ class VideoService {
     String? lastUnavailableMessage;
 
     for (final endpoint in endpointCandidates) {
-      final uri = Uri.parse('$_baseUrl$endpoint');
-
-      final response = await _sendAuthenticated((headers) async {
-        final multipartHeaders = Map<String, String>.from(headers)
-          ..removeWhere((key, _) => key.toLowerCase() == 'content-type');
-
-        final request = http.MultipartRequest('POST', uri)
-          ..headers.addAll(multipartHeaders)
-          ..files.add(
-            await http.MultipartFile.fromPath('file', normalizedPath),
-          );
-
-        final streamedResponse = await _httpClient.send(request);
-        return http.Response.fromStream(streamedResponse);
+      final formData = FormData.fromMap(<String, dynamic>{
+        'file': await MultipartFile.fromFile(normalizedPath),
       });
 
-      final decoded = _decodeBody(response.body);
+      final response = await _dio.post<dynamic>(endpoint, data: formData);
+      final dynamic data = response.data;
+      final int statusCode = response.statusCode ?? 0;
 
-      if (response.statusCode == 404 || response.statusCode == 405) {
+      if (statusCode == 404 || statusCode == 405) {
         lastUnavailableMessage = _extractErrorMessage(
-          decoded: decoded,
-          statusCode: response.statusCode,
+          decoded: data,
+          statusCode: statusCode,
         );
         continue;
       }
 
-      if (response.statusCode < 200 || response.statusCode >= 300) {
+      if (statusCode < 200 || statusCode >= 300) {
         throw Exception(
-          _extractErrorMessage(
-            decoded: decoded,
-            statusCode: response.statusCode,
-          ),
+          _extractErrorMessage(decoded: data, statusCode: statusCode),
         );
       }
 
-      final sourceUrl = _extractSourceUrlFromPayload(decoded);
+      final sourceUrl = _extractSourceUrlFromPayload(data);
       if (sourceUrl == null) {
         throw Exception(
           'Source upload succeeded, but no usable media URL was returned.',
@@ -517,10 +353,7 @@ class VideoService {
   static Future<Map<String, dynamic>> getVideoStatus({
     required String videoId,
   }) async {
-    final uri = Uri.parse('$_baseUrl/api/videos/$videoId/status');
-    final response = await _sendAuthenticated(
-      (headers) => _httpClient.get(uri, headers: headers),
-    );
+    final response = await _dio.get<dynamic>('/api/videos/$videoId/status');
     final statusResponse = _processResponse(response);
     return _processStatusResponse(statusResponse);
   }
@@ -530,13 +363,9 @@ class VideoService {
     required String videoId,
     required String comment,
   }) async {
-    final uri = Uri.parse('$_baseUrl/api/videos/$videoId/comments');
-    final response = await _sendAuthenticated(
-      (headers) => _httpClient.post(
-        uri,
-        headers: headers,
-        body: jsonEncode(<String, String>{'comment': comment}),
-      ),
+    final response = await _dio.post<dynamic>(
+      '/api/videos/$videoId/comments',
+      data: <String, String>{'comment': comment},
     );
     return _processResponse(response);
   }
@@ -545,19 +374,14 @@ class VideoService {
   static Future<VideoCommentsResponse> getCommentsResponse({
     required String videoId,
   }) async {
-    final uri = Uri.parse('$_baseUrl/api/videos/$videoId/comments');
-
-    final response = await _sendWithOptionalAuth(
-      (headers) => _httpClient.get(uri, headers: headers),
-    );
-
-    final dynamic decoded = _decodeBody(response.body);
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      return _parseCommentsResponse(decoded);
+    final response = await _dio.get<dynamic>('/api/videos/$videoId/comments');
+    final dynamic data = response.data;
+    final int statusCode = response.statusCode ?? 0;
+    if (statusCode >= 200 && statusCode < 300) {
+      return _parseCommentsResponse(data);
     }
-
     throw Exception(
-      _extractErrorMessage(decoded: decoded, statusCode: response.statusCode),
+      _extractErrorMessage(decoded: data, statusCode: statusCode),
     );
   }
 
@@ -572,13 +396,9 @@ class VideoService {
     required String commentId,
     required String comment,
   }) async {
-    final uri = Uri.parse('$_baseUrl/api/comments/$commentId');
-    final response = await _sendAuthenticated(
-      (headers) => _httpClient.put(
-        uri,
-        headers: headers,
-        body: jsonEncode(<String, String>{'comment': comment}),
-      ),
+    final response = await _dio.put<dynamic>(
+      '/api/comments/$commentId',
+      data: <String, String>{'comment': comment},
     );
     return _processResponse(response);
   }
@@ -587,10 +407,7 @@ class VideoService {
   static Future<Map<String, dynamic>> deleteComment({
     required String commentId,
   }) async {
-    final uri = Uri.parse('$_baseUrl/api/comments/$commentId');
-    final response = await _sendAuthenticated(
-      (headers) => _httpClient.delete(uri, headers: headers),
-    );
+    final response = await _dio.delete<dynamic>('/api/comments/$commentId');
     return _processResponse(response);
   }
 
@@ -599,13 +416,9 @@ class VideoService {
     required String videoId,
     required int voteType,
   }) async {
-    final uri = Uri.parse('$_baseUrl/api/videos/$videoId/vote');
-    final response = await _sendAuthenticated(
-      (headers) => _httpClient.post(
-        uri,
-        headers: headers,
-        body: jsonEncode(<String, int>{'vote_type': voteType}),
-      ),
+    final response = await _dio.post<dynamic>(
+      '/api/videos/$videoId/vote',
+      data: <String, int>{'vote_type': voteType},
     );
     return _processResponse(response);
   }
@@ -614,11 +427,7 @@ class VideoService {
   static Future<Map<String, dynamic>> getVideoVotes({
     required String videoId,
   }) async {
-    final uri = Uri.parse('$_baseUrl/api/videos/$videoId/votes');
-
-    final response = await _sendWithOptionalAuth(
-      (headers) => _httpClient.get(uri, headers: headers),
-    );
+    final response = await _dio.get<dynamic>('/api/videos/$videoId/votes');
     return _processResponse(response);
   }
 
@@ -628,38 +437,35 @@ class VideoService {
     required String reason,
     String? customReason,
   }) async {
-    final uri = Uri.parse('$_baseUrl/api/videos/$videoId/report');
     final body = <String, String>{
       'reason': reason,
       if (customReason != null && customReason.trim().isNotEmpty)
         'custom_reason': customReason.trim(),
     };
-    final response = await _sendAuthenticated(
-      (headers) =>
-          _httpClient.post(uri, headers: headers, body: jsonEncode(body)),
+    final response = await _dio.post<dynamic>(
+      '/api/videos/$videoId/report',
+      data: body,
     );
     return _processResponse(response);
   }
 
   /// GET /api/me/comment-filters
   static Future<List<Map<String, dynamic>>> getCommentFilters() async {
-    final uri = Uri.parse('$_baseUrl/api/me/comment-filters');
-    final response = await _sendAuthenticated(
-      (headers) => _httpClient.get(uri, headers: headers),
-    );
-    final dynamic decoded = _decodeBody(response.body);
+    final response = await _dio.get<dynamic>('/api/me/comment-filters');
+    final dynamic data = response.data;
+    final int statusCode = response.statusCode ?? 0;
 
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      if (decoded is List) {
+    if (statusCode >= 200 && statusCode < 300) {
+      if (data is List) {
         return List<Map<String, dynamic>>.from(
-          decoded.map((item) => Map<String, dynamic>.from(item as Map)),
+          data.map((item) => Map<String, dynamic>.from(item as Map)),
         );
       }
       return <Map<String, dynamic>>[];
     }
 
     throw Exception(
-      _extractErrorMessage(decoded: decoded, statusCode: response.statusCode),
+      _extractErrorMessage(decoded: data, statusCode: statusCode),
     );
   }
 
@@ -667,11 +473,9 @@ class VideoService {
   static Future<Map<String, dynamic>> addCommentFilter({
     required String keyword,
   }) async {
-    final uri = Uri.parse('$_baseUrl/api/me/comment-filters');
-    final body = <String, String>{'keyword': keyword.trim()};
-    final response = await _sendAuthenticated(
-      (headers) =>
-          _httpClient.post(uri, headers: headers, body: jsonEncode(body)),
+    final response = await _dio.post<dynamic>(
+      '/api/me/comment-filters',
+      data: <String, String>{'keyword': keyword.trim()},
     );
     return _processResponse(response);
   }
@@ -680,10 +484,13 @@ class VideoService {
   static Future<Map<String, dynamic>> deleteCommentFilter({
     required String filterId,
   }) async {
-    final uri = Uri.parse('$_baseUrl/api/me/comment-filters/$filterId');
-    final response = await _sendAuthenticated(
-      (headers) => _httpClient.delete(uri, headers: headers),
+    final response = await _dio.delete<dynamic>(
+      '/api/me/comment-filters/$filterId',
     );
     return _processResponse(response);
   }
+
+  @visibleForTesting
+  static String applyCloudinaryTransformsForTesting(String url) =>
+      _applyCloudinaryTransforms(url);
 }

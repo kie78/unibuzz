@@ -2,6 +2,8 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+        maven { url = uri("https://github.com/arthenica/ffmpeg-kit/raw/main/prebuilt/bundle-android-aar/ffmpeg-kit-min") }
+        maven { url = uri("https://raw.githubusercontent.com/arthenica/ffmpeg-kit/main/prebuilt/maven") }
     }
 }
 

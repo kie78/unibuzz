@@ -1,18 +1,12 @@
-// If you see an error for flutter_secure_storage, add it to pubspec.yaml:
-// dependencies:
-//   flutter_secure_storage: ^9.0.0
 import 'dart:convert';
-import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
 
 class AuthService {
   static const String _defaultBaseUrl = 'https://unibuzz-api.onrender.com';
   static final FlutterSecureStorage _storage = FlutterSecureStorage();
-  static http.Client _httpClient = http.Client();
-  static String? _baseUrlForTesting;
   static const Duration _startupExpirySkew = Duration(seconds: 30);
   static const String _profileFullNameKey = 'profile_full_name';
   static const String _profileUsernameKey = 'profile_username';
@@ -35,65 +29,52 @@ class AuthService {
     _profileUserIdKey,
   ];
 
-  static String get _baseUrl => _baseUrlForTesting ?? _defaultBaseUrl;
+  // Plain Dio — no auth interceptor; auth_service IS the auth provider.
+  static final Dio _dio = Dio(
+    BaseOptions(
+      baseUrl: _defaultBaseUrl,
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 60),
+      contentType: 'application/json',
+      validateStatus: (_) => true,
+    ),
+  );
 
-  static Exception _mapTransportException(Object error) {
-    final text = error.toString().toLowerCase();
-
-    if (text.contains('failed host lookup') ||
-        text.contains('no address associated with hostname') ||
-        text.contains('name or service not known')) {
+  static Exception _mapTransportException(DioException error) {
+    if (error.type == DioExceptionType.connectionError) {
       return Exception(
         'Unable to reach UniBuzz servers. Check your internet connection and DNS, then try again.',
       );
     }
-
-    if (text.contains('timed out') || text.contains('timeout')) {
+    if (error.type == DioExceptionType.connectionTimeout ||
+        error.type == DioExceptionType.receiveTimeout ||
+        error.type == DioExceptionType.sendTimeout) {
       return Exception('Request timed out. Please try again.');
     }
-
-    if (text.contains('connection refused') ||
-        text.contains('network is unreachable')) {
+    final msg = error.message?.toLowerCase() ?? '';
+    if (msg.contains('failed host lookup') ||
+        msg.contains('no address associated') ||
+        msg.contains('name or service not known')) {
+      return Exception(
+        'Unable to reach UniBuzz servers. Check your internet connection and DNS, then try again.',
+      );
+    }
+    if (msg.contains('connection refused') ||
+        msg.contains('network is unreachable')) {
       return Exception('Network unavailable. Please check your connection.');
     }
-
     return Exception('Network request failed. Please try again.');
   }
 
-  static Future<http.Response> _safePost(
-    Uri uri, {
-    Map<String, String>? headers,
-    Object? body,
+  static Future<Response<dynamic>> _safePost(
+    String path, {
+    dynamic data,
+    Options? options,
   }) async {
     try {
-      return await _httpClient.post(uri, headers: headers, body: body);
-    } on SocketException catch (error) {
+      return await _dio.post<dynamic>(path, data: data, options: options);
+    } on DioException catch (error) {
       throw _mapTransportException(error);
-    } on http.ClientException catch (error) {
-      throw _mapTransportException(error);
-    }
-  }
-
-  @visibleForTesting
-  static void configureForTesting({http.Client? httpClient, String? baseUrl}) {
-    if (httpClient != null) {
-      _httpClient = httpClient;
-    }
-    _baseUrlForTesting = baseUrl;
-  }
-
-  @visibleForTesting
-  static void resetForTesting() {
-    _httpClient = http.Client();
-    _baseUrlForTesting = null;
-  }
-
-  static dynamic _decodeBody(String body) {
-    if (body.isEmpty) return <String, dynamic>{};
-    try {
-      return jsonDecode(body);
-    } catch (_) {
-      return <String, dynamic>{};
     }
   }
 
@@ -139,7 +120,6 @@ class AuthService {
   }) {
     final expSeconds = _parseEpochSeconds(payload['exp']);
     if (expSeconds == null) {
-      // Some environments may issue tokens without exp; treat as valid.
       return false;
     }
 
@@ -569,11 +549,6 @@ class AuthService {
       fallback: cachedProfile,
     );
 
-    final headers = <String, String>{
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer $token',
-    };
-
     const endpointCandidates = <String>[
       '/api/me',
       '/auth/me',
@@ -586,14 +561,17 @@ class AuthService {
 
     for (final endpoint in endpointCandidates) {
       try {
-        final response = await _httpClient.get(
-          Uri.parse('$_baseUrl$endpoint'),
-          headers: headers,
+        final response = await _dio.get<dynamic>(
+          endpoint,
+          options: Options(
+            headers: <String, String>{'Authorization': 'Bearer $token'},
+          ),
         );
 
-        final decoded = _decodeBody(response.body);
+        final dynamic decoded = response.data;
+        final int statusCode = response.statusCode ?? 0;
 
-        if (response.statusCode >= 200 && response.statusCode < 300) {
+        if (statusCode >= 200 && statusCode < 300) {
           if (decoded is Map) {
             final normalized = _normalizeProfilePayload(
               Map<dynamic, dynamic>.from(decoded),
@@ -608,12 +586,12 @@ class AuthService {
           throw Exception('Profile response was empty.');
         }
 
-        if (response.statusCode == 401) {
+        if (statusCode == 401) {
           await logout();
           throw Exception('Session expired. Please log in again.');
         }
 
-        if (response.statusCode == 404 || response.statusCode == 405) {
+        if (statusCode == 404 || statusCode == 405) {
           continue;
         }
 
@@ -677,11 +655,6 @@ class AuthService {
       throw Exception('No profile fields were provided for update.');
     }
 
-    final headers = <String, String>{
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer $token',
-    };
-
     const endpointCandidates = <String>[
       '/api/me',
       '/auth/me',
@@ -694,15 +667,18 @@ class AuthService {
 
     for (final endpoint in endpointCandidates) {
       try {
-        final response = await _httpClient.patch(
-          Uri.parse('$_baseUrl$endpoint'),
-          headers: headers,
-          body: jsonEncode(payload),
+        final response = await _dio.patch<dynamic>(
+          endpoint,
+          data: payload,
+          options: Options(
+            headers: <String, String>{'Authorization': 'Bearer $token'},
+          ),
         );
 
-        final decoded = _decodeBody(response.body);
+        final dynamic decoded = response.data;
+        final int statusCode = response.statusCode ?? 0;
 
-        if (response.statusCode >= 200 && response.statusCode < 300) {
+        if (statusCode >= 200 && statusCode < 300) {
           final existingProfile = await _readProfileCache();
           final mergedFallback = <String, dynamic>{
             ...existingProfile,
@@ -720,12 +696,12 @@ class AuthService {
           return normalized;
         }
 
-        if (response.statusCode == 401) {
+        if (statusCode == 401) {
           await logout();
           throw Exception('Session expired. Please log in again.');
         }
 
-        if (response.statusCode == 404 || response.statusCode == 405) {
+        if (statusCode == 404 || statusCode == 405) {
           continue;
         }
 
@@ -759,9 +735,8 @@ class AuthService {
     required int yearOfStudy,
   }) async {
     final response = await _safePost(
-      Uri.parse('$_baseUrl/auth/register'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
+      '/auth/register',
+      data: <String, dynamic>{
         'full_name': fullName,
         'username': username,
         'email': email,
@@ -769,7 +744,7 @@ class AuthService {
         'university_name': universityName,
         'course': course,
         'year_of_study': yearOfStudy,
-      }),
+      },
     );
     final data = _processResponse(response);
 
@@ -792,9 +767,8 @@ class AuthService {
     required String password,
   }) async {
     final response = await _safePost(
-      Uri.parse('$_baseUrl/auth/login'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'email': email, 'password': password}),
+      '/auth/login',
+      data: <String, dynamic>{'email': email, 'password': password},
     );
     final data = _processResponse(response);
     if (response.statusCode == 200) {
@@ -834,9 +808,8 @@ class AuthService {
       throw Exception('No refresh token found');
     }
     final response = await _safePost(
-      Uri.parse('$_baseUrl/auth/refresh'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'refresh_token': refreshToken}),
+      '/auth/refresh',
+      data: <String, dynamic>{'refresh_token': refreshToken},
     );
     final data = _processResponse(response);
     if (response.statusCode == 200) {
@@ -849,19 +822,26 @@ class AuthService {
     return data;
   }
 
-  static Map<String, dynamic> _processResponse(http.Response response) {
-    final dynamic decoded = _decodeBody(response.body);
+  static Map<String, dynamic> _processResponse(Response<dynamic> response) {
+    final dynamic decoded = response.data;
     final Map<String, dynamic> data = decoded is Map<String, dynamic>
         ? decoded
         : <String, dynamic>{};
-    if (response.statusCode >= 200 && response.statusCode < 300) {
+    final int statusCode = response.statusCode ?? 0;
+    if (statusCode >= 200 && statusCode < 300) {
       return data;
-    } else {
-      throw Exception(
-        data['message']?.toString() ??
-            data['error']?.toString() ??
-            'Request failed with status ${response.statusCode}',
-      );
     }
+    throw Exception(
+      data['message']?.toString() ??
+          data['error']?.toString() ??
+          'Request failed with status $statusCode',
+    );
   }
+
+  @visibleForTesting
+  static Map<String, dynamic> normalizeProfilePayloadForTesting(
+    Map<dynamic, dynamic> source, {
+    Map<String, dynamic>? fallback,
+  }) =>
+      _normalizeProfilePayload(source, fallback: fallback);
 }

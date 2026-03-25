@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:unibuzz/interfaces/video_trim_screen.dart';
 
 class EditPostScreen extends StatefulWidget {
   const EditPostScreen({super.key, this.postId});
@@ -99,20 +98,8 @@ class _EditPostScreenState extends State<EditPostScreen> {
     Navigator.of(context).pop();
   }
 
-  void _handleTrimVideo() async {
-    // Use the current post's video path. In a real app, this would come from post data.
-    final String videoPath = '/storage/emulated/0/DCIM/sample_video.mp4';
-    if (!mounted) return;
-
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (BuildContext context) => VideoTrimScreen(
-          videoPath: videoPath,
-          maxDurationSeconds: 20,
-          navigateToPublishOnSave: false,
-        ),
-      ),
-    );
+  void _handleTrimVideo() {
+    // Trimming has been removed from this app.
   }
 
   void _handleReplaceClip() async {
@@ -125,15 +112,7 @@ class _EditPostScreenState extends State<EditPostScreen> {
       return;
     }
 
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (BuildContext context) => VideoTrimScreen(
-          videoPath: pickedVideo.path,
-          maxDurationSeconds: 20,
-          navigateToPublishOnSave: false,
-        ),
-      ),
-    );
+    // Video selected; trimming has been removed — proceed with the raw clip.
   }
 
   void _editCaption() {

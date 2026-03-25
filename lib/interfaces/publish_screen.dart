@@ -2,12 +2,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:unibuzz/interfaces/video_trim_screen.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:unibuzz/services/pending_upload_tracker_service.dart';
 import 'package:unibuzz/services/video_service.dart';
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
 import 'package:crypto/crypto.dart';
-import 'package:video_compress/video_compress.dart';
+import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
+import 'package:ffmpeg_kit_flutter_new/return_code.dart';
 import 'package:video_player/video_player.dart';
 
 class PublishScreen extends StatefulWidget {
@@ -24,12 +25,6 @@ class _PublishScreenState extends State<PublishScreen> {
   static const int _compressionAttemptThresholdBytes = 16 * 1024 * 1024;
   static const Duration _processingPollInterval = Duration(seconds: 5);
   static const int _maxProcessingPollAttempts = 20;
-  // Optional fallback uploader values, used only if backend source-upload
-  // endpoints are unavailable. You can also inject these via --dart-define.
-  static const String _bundledCloudinaryCloudName = '';
-  static const String _bundledCloudinaryUploadPreset = '';
-  static const String _bundledCloudinaryApiKey = '';
-  static const String _bundledCloudinaryApiSecret = '';
 
   VideoPlayerController? _videoController;
   bool _isInitializing = true;
@@ -56,7 +51,12 @@ class _PublishScreenState extends State<PublishScreen> {
     super.initState();
     _captionController = TextEditingController();
     _hashtagController = TextEditingController();
+    _hashtagController.addListener(_onHashtagChanged);
     _initializeVideo();
+  }
+
+  void _onHashtagChanged() {
+    setState(() {});
   }
 
   Future<void> _initializeVideo() async {
@@ -187,9 +187,9 @@ class _PublishScreenState extends State<PublishScreen> {
     return status == 'complete' ||
         status == 'completed' ||
         status == 'done' ||
-      status == 'success' ||
-      status == 'processed' ||
-      status == 'ready';
+        status == 'success' ||
+        status == 'processed' ||
+        status == 'ready';
   }
 
   bool _isFailedStatus(String? status) {
@@ -216,25 +216,10 @@ class _PublishScreenState extends State<PublishScreen> {
   }
 
   Map<String, String> _resolveCloudinaryConfig() {
-    const defineCloudName = String.fromEnvironment('CLOUDINARY_CLOUD_NAME');
-    const defineUploadPreset = String.fromEnvironment(
-      'CLOUDINARY_UPLOAD_PRESET',
-    );
-    const defineApiKey = String.fromEnvironment('CLOUDINARY_API_KEY');
-    const defineApiSecret = String.fromEnvironment('CLOUDINARY_API_SECRET');
-
-    final cloudName = defineCloudName.isNotEmpty
-        ? defineCloudName
-        : _bundledCloudinaryCloudName;
-    final uploadPreset = defineUploadPreset.isNotEmpty
-        ? defineUploadPreset
-        : _bundledCloudinaryUploadPreset;
-    final apiKey = defineApiKey.isNotEmpty
-        ? defineApiKey
-        : _bundledCloudinaryApiKey;
-    final apiSecret = defineApiSecret.isNotEmpty
-        ? defineApiSecret
-        : _bundledCloudinaryApiSecret;
+    final cloudName = dotenv.env['CLOUDINARY_CLOUD_NAME'] ?? '';
+    final uploadPreset = dotenv.env['CLOUDINARY_UPLOAD_PRESET'] ?? '';
+    final apiKey = dotenv.env['CLOUDINARY_API_KEY'] ?? '';
+    final apiSecret = dotenv.env['CLOUDINARY_API_SECRET'] ?? '';
 
     if (cloudName.isEmpty) {
       throw Exception(
@@ -268,12 +253,11 @@ class _PublishScreenState extends State<PublishScreen> {
     required int timestamp,
     required String apiSecret,
     required String folder,
-    required String resourceType,
   }) {
     // Cloudinary signature requires a sorted query-string style payload.
+    // Excluded params: file, cloud_name, resource_type, api_key.
     final params = <String, String>{
       'folder': folder,
-      'resource_type': resourceType,
       'timestamp': timestamp.toString(),
     };
     final sortedKeys = params.keys.toList()..sort();
@@ -333,31 +317,33 @@ class _PublishScreenState extends State<PublishScreen> {
     });
 
     try {
-      final compressed = await VideoCompress.compressVideo(
-        sourcePath,
-        quality: VideoQuality.MediumQuality,
-        deleteOrigin: false,
-        includeAudio: true,
-        frameRate: 24,
+      final compressedPath =
+          '${sourcePath.replaceAll(RegExp(r'\.[^.]+$'), '')}_compressed.mp4';
+      final session = await FFmpegKit.execute(
+        '-y -i "$sourcePath" -vcodec libx264 -crf 28 -preset fast '
+        '-acodec aac -b:a 128k -r 24 "$compressedPath"',
       );
+      final returnCode = await session.getReturnCode();
 
-      final compressedFile = compressed?.file;
-      if (compressed == null ||
-          compressed.isCancel == true ||
-          compressedFile == null ||
-          !compressedFile.existsSync()) {
+      if (!ReturnCode.isSuccess(returnCode)) {
+        return sourcePath;
+      }
+
+      final compressedFile = File(compressedPath);
+      if (!compressedFile.existsSync()) {
         return sourcePath;
       }
 
       final compressedBytes = compressedFile.lengthSync();
       if (compressedBytes <= 0 || compressedBytes >= sourceBytes) {
+        compressedFile.deleteSync();
         return sourcePath;
       }
 
-      _temporaryCompressedVideoPath = compressedFile.path;
+      _temporaryCompressedVideoPath = compressedPath;
 
       if (!mounted) {
-        return compressedFile.path;
+        return compressedPath;
       }
 
       setState(() {
@@ -365,7 +351,7 @@ class _PublishScreenState extends State<PublishScreen> {
         _uploadProgress = _uploadProgress < 0.06 ? 0.06 : _uploadProgress;
       });
 
-      return compressedFile.path;
+      return compressedPath;
     } catch (_) {
       return sourcePath;
     }
@@ -433,7 +419,9 @@ class _PublishScreenState extends State<PublishScreen> {
         ? 'Upload queued. Your video is processing and will appear once ready.'
         : 'Upload queued (ID: $processingVideoId). Your video is processing and will appear once ready.';
 
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
     Navigator.of(context).pop(true);
   }
 
@@ -472,12 +460,16 @@ class _PublishScreenState extends State<PublishScreen> {
       });
 
       try {
-        final statusPayload = await VideoService.getVideoStatus(videoId: videoId);
+        final statusPayload = await VideoService.getVideoStatus(
+          videoId: videoId,
+        );
         final status = _extractStatus(statusPayload);
 
         if (_isCompleteStatus(status) || _hasPlayableVideoUrl(statusPayload)) {
           if (trackedVideoId != null) {
-            await PendingUploadTrackerService.removePendingUpload(trackedVideoId);
+            await PendingUploadTrackerService.removePendingUpload(
+              trackedVideoId,
+            );
           }
 
           if (!mounted || _stopProcessingPollRequested) {
@@ -548,7 +540,9 @@ class _PublishScreenState extends State<PublishScreen> {
         ? 'Upload queued. Your video is still processing, check back shortly.'
         : 'Upload queued (ID: $trackedVideoId). Still processing, check back shortly.';
 
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(queueMessage)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(queueMessage)));
     Navigator.of(context).pop(true);
   }
 
@@ -659,20 +653,15 @@ class _PublishScreenState extends State<PublishScreen> {
       }
 
       try {
-        final uri = Uri.parse(
-          'https://api.cloudinary.com/v1_1/$cloudName/video/upload',
-        );
-        final request = http.MultipartRequest('POST', uri);
+        final cloudinaryDio = Dio(BaseOptions(validateStatus: (_) => true));
         const folder = 'unibuzz/videos';
-        const resourceType = 'video';
-        request.fields['folder'] = folder;
-        request.fields['resource_type'] = resourceType;
+        final fields = <String, dynamic>{'folder': folder};
 
         if (uploadMode == 'unsigned') {
           if (uploadPreset == null || uploadPreset.isEmpty) {
             throw Exception('Missing Cloudinary upload preset.');
           }
-          request.fields['upload_preset'] = uploadPreset;
+          fields['upload_preset'] = uploadPreset;
         } else {
           if (apiKey == null || apiKey.isEmpty) {
             throw Exception('Missing Cloudinary API key.');
@@ -683,28 +672,28 @@ class _PublishScreenState extends State<PublishScreen> {
 
           final timestamp =
               DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
-          request.fields['timestamp'] = timestamp.toString();
-          request.fields['api_key'] = apiKey;
-          request.fields['signature'] = _buildCloudinarySignature(
+          fields['timestamp'] = timestamp.toString();
+          fields['api_key'] = apiKey;
+          fields['signature'] = _buildCloudinarySignature(
             timestamp: timestamp,
             apiSecret: apiSecret,
             folder: folder,
-            resourceType: resourceType,
           );
         }
 
-        request.files.add(
-          await http.MultipartFile.fromPath('file', filePath),
+        fields['file'] = await MultipartFile.fromFile(filePath);
+        final formData = FormData.fromMap(fields);
+
+        final response = await cloudinaryDio.post<dynamic>(
+          'https://api.cloudinary.com/v1_1/$cloudName/video/upload',
+          data: formData,
         );
 
-        final streamedResponse = await request.send();
-        final response = await http.Response.fromStream(streamedResponse);
+        final dynamic decoded = response.data;
 
-        final dynamic decoded = response.body.isNotEmpty
-            ? jsonDecode(response.body)
-            : null;
-
-        if (response.statusCode < 200 || response.statusCode >= 300) {
+        if (response.statusCode == null ||
+            response.statusCode! < 200 ||
+            response.statusCode! >= 300) {
           String? cloudinaryMessage;
           if (decoded is Map && decoded['error'] is Map) {
             final dynamic message = decoded['error']['message'];
@@ -713,15 +702,16 @@ class _PublishScreenState extends State<PublishScreen> {
             }
           }
 
+          final statusCode = response.statusCode ?? 0;
           final nonRetryable =
-              response.statusCode >= 400 &&
-              response.statusCode < 500 &&
-              response.statusCode != 408 &&
-              response.statusCode != 429;
+              statusCode >= 400 &&
+              statusCode < 500 &&
+              statusCode != 408 &&
+              statusCode != 429;
 
           final message =
               cloudinaryMessage ??
-              'Cloud upload failed with status ${response.statusCode}.';
+              'Cloud upload failed with status $statusCode.';
 
           if (nonRetryable) {
             throw Exception(message);
@@ -882,7 +872,8 @@ class _PublishScreenState extends State<PublishScreen> {
       final immediateStatus = _extractStatus(uploadPayload);
       if (_isFailedStatus(immediateStatus)) {
         throw Exception(
-          _extractMessage(uploadPayload) ?? 'Video processing failed on the server.',
+          _extractMessage(uploadPayload) ??
+              'Video processing failed on the server.',
         );
       }
 
@@ -912,7 +903,10 @@ class _PublishScreenState extends State<PublishScreen> {
         );
       }
 
-      await _pollQueuedVideoStatus(videoId: videoId, trackedVideoId: trackedVideoId);
+      await _pollQueuedVideoStatus(
+        videoId: videoId,
+        trackedVideoId: trackedVideoId,
+      );
       return;
     } catch (error) {
       if (trackedVideoId != null) {
@@ -982,45 +976,10 @@ class _PublishScreenState extends State<PublishScreen> {
     );
   }
 
-  Future<void> _onTrimPressed() async {
-    if (_isBusy) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Upload in progress. Trim is disabled for now.'),
-        ),
-      );
-      return;
-    }
-
-    final String? trimmedPath = await Navigator.of(context).push<String>(
-      MaterialPageRoute<String>(
-        builder: (BuildContext context) => VideoTrimScreen(
-          videoPath: widget.videoPath,
-          maxDurationSeconds: 20,
-          navigateToPublishOnSave: false,
-        ),
-      ),
-    );
-
-    if (!mounted || trimmedPath == null) return;
-
-    await Navigator.of(context).pushReplacement(
-      MaterialPageRoute<bool>(
-        builder: (BuildContext context) =>
-            PublishScreen(videoPath: trimmedPath),
-      ),
-    );
-  }
-
   @override
   void dispose() {
     _stopProcessingPollRequested = true;
     _cleanupTemporaryCompressedVideo();
-    try {
-      VideoCompress.dispose();
-    } catch (_) {
-      // Ignore compressor dispose failures on unsupported platforms.
-    }
     _captionController.dispose();
     _hashtagController.dispose();
     _videoController?.dispose();
@@ -1556,34 +1515,6 @@ class _PublishScreenState extends State<PublishScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: <Widget>[
-                  // Trim Video Button
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      GestureDetector(
-                        onTap: _onTrimPressed,
-                        child: Container(
-                          width: 56,
-                          height: 56,
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.4),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.content_cut,
-                            color: Colors.white,
-                            size: 24,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Trim Video',
-                        style: TextStyle(color: Colors.white, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(width: 48),
                   // Discard Button
                   Column(
                     mainAxisSize: MainAxisSize.min,

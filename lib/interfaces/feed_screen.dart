@@ -1,6 +1,9 @@
+import 'dart:async';
+
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
 import 'package:unibuzz/interfaces/comment_section.dart';
-import 'package:unibuzz/interfaces/full_screen_view.dart';
 import 'package:unibuzz/interfaces/report_screen.dart';
 import 'package:unibuzz/services/auth_service.dart';
 import 'package:unibuzz/services/feed_cache_service.dart';
@@ -8,6 +11,7 @@ import 'package:unibuzz/services/pending_upload_tracker_service.dart';
 import 'package:unibuzz/services/video_player_pool_service.dart';
 import 'package:unibuzz/services/video_service.dart';
 import 'package:video_player/video_player.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 Widget _buildAvatarWidget({
   required double radius,
@@ -58,6 +62,7 @@ class _FeedScreenState extends State<FeedScreen> with WidgetsBindingObserver {
   DateTime? _lastCurrentUserAvatarSyncAt;
 
   bool _isSyncingPendingUploads = false;
+  Timer? _pendingUploadPollTimer;
 
   final PageController _pageController = PageController();
   VideoPlayerPoolService? _videoPlayerPool;
@@ -80,11 +85,16 @@ class _FeedScreenState extends State<FeedScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _loadFeed();
     _loadCurrentUserAvatar(force: true);
+    _pendingUploadPollTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _syncPendingUploads(),
+    );
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _pendingUploadPollTimer?.cancel();
     _detachProgressListener();
     _videoPlayerPool?.dispose();
     _pageController.dispose();
@@ -695,15 +705,6 @@ class _FeedScreenState extends State<FeedScreen> with WidgetsBindingObserver {
           ),
           const Spacer(),
           IconButton(
-            onPressed: _videos.isEmpty ? null : _toggleMute,
-            icon: Icon(
-              _isMuted ? Icons.volume_off : Icons.volume_up,
-              color: Colors.white,
-              size: 20,
-            ),
-            tooltip: _isMuted ? 'Unmute' : 'Mute',
-          ),
-          IconButton(
             onPressed: _isLoading ? null : _refreshFeed,
             icon: const Icon(Icons.refresh, color: Colors.white, size: 20),
             tooltip: 'Refresh feed',
@@ -829,6 +830,7 @@ class _FeedScreenState extends State<FeedScreen> with WidgetsBindingObserver {
             isActive: index == _currentPageIndex,
             isMuted: _isMuted,
             onEnsureController: () => _ensureControllerForIndex(index),
+            onToggleMute: _toggleMute,
           );
         },
       ),
@@ -982,6 +984,7 @@ class _FeedVideoPage extends StatefulWidget {
     required this.isActive,
     required this.isMuted,
     required this.onEnsureController,
+    required this.onToggleMute,
   });
 
   final int index;
@@ -990,6 +993,7 @@ class _FeedVideoPage extends StatefulWidget {
   final bool isActive;
   final bool isMuted;
   final Future<void> Function() onEnsureController;
+  final VoidCallback onToggleMute;
 
   @override
   State<_FeedVideoPage> createState() => _FeedVideoPageState();
@@ -999,6 +1003,7 @@ class _FeedVideoPageState extends State<_FeedVideoPage> {
   int? _voteState;
   int? _upvotes;
   int? _commentsCount;
+  ChewieController? _chewieController;
 
   @override
   void initState() {
@@ -1006,6 +1011,7 @@ class _FeedVideoPageState extends State<_FeedVideoPage> {
     _loadCounts();
     _requestControllerIfNeeded();
     _syncPlaybackWithState();
+    _rebuildChewieController();
   }
 
   @override
@@ -1025,6 +1031,35 @@ class _FeedVideoPageState extends State<_FeedVideoPage> {
       _requestControllerIfNeeded();
       _syncPlaybackWithState();
     }
+
+    if (oldWidget.controller != widget.controller) {
+      _rebuildChewieController();
+    }
+  }
+
+  void _rebuildChewieController() {
+    _chewieController?.dispose();
+    _chewieController = null;
+
+    final controller = widget.controller;
+    if (controller == null || !controller.value.isInitialized) {
+      return;
+    }
+
+    _chewieController = ChewieController(
+      videoPlayerController: controller,
+      autoPlay: false,
+      looping: true,
+      showControls: false,
+      allowFullScreen: false,
+      allowMuting: false,
+    );
+  }
+
+  @override
+  void dispose() {
+    _chewieController?.dispose();
+    super.dispose();
   }
 
   Future<void> _requestControllerIfNeeded() async {
@@ -1300,22 +1335,6 @@ class _FeedVideoPageState extends State<_FeedVideoPage> {
     return tags.take(3).toList();
   }
 
-  String get _timestampLabel {
-    final createdAt = widget.video['created_at'];
-    if (createdAt is String && createdAt.isNotEmpty) {
-      try {
-        final dt = DateTime.parse(createdAt).toLocal();
-        final day = dt.day.toString().padLeft(2, '0');
-        final month = dt.month.toString().padLeft(2, '0');
-        final yearTwoDigits = (dt.year % 100).toString().padLeft(2, '0');
-        return '$day/$month/$yearTwoDigits';
-      } catch (_) {
-        return 'Just now';
-      }
-    }
-    return 'Just now';
-  }
-
   String? get _thumbnailUrl {
     final thumb = widget.video['thumbnail_url'];
     if (thumb is String && thumb.isNotEmpty) {
@@ -1505,222 +1524,158 @@ class _FeedVideoPageState extends State<_FeedVideoPage> {
     );
   }
 
-  Future<void> _openFullScreen() async {
-    final interactionState = await Navigator.of(context)
-        .push<Map<String, int?>>(
-          MaterialPageRoute<Map<String, int?>>(
-            builder: (BuildContext context) => FullScreenVideoView(
-              cardIndex: widget.index,
-              heroTag: 'video-card-${widget.index}',
-              video: widget.video,
-              initialVoteState: _voteState,
-              initialUpvotes: _upvotes,
-              initialCommentsCount: _commentsCount,
-            ),
-          ),
-        );
-
-    if (!mounted) return;
-    if (interactionState != null) {
-      setState(() {
-        _voteState = interactionState['voteState'];
-        _upvotes = interactionState['upvotes'];
-        _commentsCount = interactionState['commentsCount'];
-      });
+  void _togglePlayPause() {
+    final controller = widget.controller;
+    if (controller == null || !controller.value.isInitialized) return;
+    if (controller.value.isPlaying) {
+      controller.pause();
+    } else {
+      controller.play();
     }
-
-    await _loadCounts();
+    setState(() {});
   }
 
-  Widget _buildTopMeta() {
-    return Row(
+  Widget _buildRightSidebar() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         _buildAvatarWidget(
-          radius: 18,
+          radius: 22,
           backgroundColor: const Color(0xFF00B4D8),
           imageUrl: _authorAvatarUrl,
           iconColor: Colors.white,
-          iconSize: 18,
+          iconSize: 22,
         ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _displayName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              if (_profileMeta.isNotEmpty)
-                Text(
-                  _profileMeta,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFFB8B8B8),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-            ],
-          ),
+        const SizedBox(height: 24),
+        _SidebarAction(
+          icon: Icons.arrow_upward_rounded,
+          label: (_upvotes ?? 0).toString(),
+          active: _voteState == 1,
+          onTap: _handleUpvote,
         ),
-        Text(
-          _timestampLabel,
-          style: const TextStyle(
-            color: Color(0xFFC9C9C9),
-            fontSize: 11,
-            fontWeight: FontWeight.w500,
-          ),
+        const SizedBox(height: 20),
+        _SidebarAction(
+          icon: Icons.arrow_downward_rounded,
+          active: _voteState == -1,
+          onTap: _handleDownvote,
+        ),
+        const SizedBox(height: 20),
+        _SidebarAction(
+          icon: Icons.chat_bubble_outline_rounded,
+          label: (_commentsCount ?? 0).toString(),
+          onTap: _openComments,
+        ),
+        const SizedBox(height: 20),
+        _SidebarAction(
+          icon: Icons.flag_outlined,
+          iconColor: const Color(0xFFFF7A7A),
+          onTap: _openReport,
         ),
       ],
     );
   }
 
-  Widget _buildActionPill({
-    required Widget child,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.45),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.12),
-            width: 1,
-          ),
-        ),
-        child: child,
-      ),
-    );
-  }
-
-  Widget _buildBottomPanel() {
+  Widget _buildBottomOverlay() {
     final controller = widget.controller;
-    final hasVideo = controller != null && controller.value.isInitialized;
+    final isBuffering =
+        widget.isActive &&
+        (controller == null || !controller.value.isInitialized);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (_caption.isNotEmpty)
+        Text(
+          _displayName,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            height: 1.2,
+          ),
+        ),
+        if (_profileMeta.isNotEmpty) ...[
+          const SizedBox(height: 2),
           Text(
-            _caption,
+            _profileMeta,
             style: const TextStyle(
-              color: Colors.white,
-              fontSize: 13,
+              color: Color(0xFFB8B8B8),
+              fontSize: 12,
               fontWeight: FontWeight.w500,
             ),
           ),
-        if (_hashtags.isNotEmpty) ...[
+        ],
+        if (_caption.isNotEmpty) ...[
           const SizedBox(height: 6),
+          Text(
+            _caption,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w400,
+              height: 1.4,
+            ),
+          ),
+        ],
+        if (_hashtags.isNotEmpty) ...[
+          const SizedBox(height: 4),
           Text(
             _hashtags.join(' '),
             style: const TextStyle(
-              color: Color(0xFF00B4D8),
+              color: Color(0xFF00D4FF),
               fontSize: 13,
               fontWeight: FontWeight.w600,
             ),
           ),
         ],
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            _buildActionPill(
-              onTap: _handleUpvote,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.arrow_upward,
-                    color: _voteState == 1
-                        ? const Color(0xFF00B4D8)
-                        : Colors.white,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    (_upvotes ?? 0).toString(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            _buildActionPill(
-              onTap: _handleDownvote,
-              child: Icon(
-                Icons.arrow_downward,
-                color: _voteState == -1
-                    ? const Color(0xFF00B4D8)
-                    : const Color(0xFFB8B8B8),
-                size: 18,
-              ),
-            ),
-            const SizedBox(width: 8),
-            _buildActionPill(
-              onTap: _openComments,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.comment_outlined,
-                    color: Colors.white,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    (_commentsCount ?? 0).toString(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Spacer(),
-            _buildActionPill(
-              onTap: _openReport,
-              child: const Icon(
-                Icons.flag_outlined,
-                color: Color(0xFFFF7A7A),
-                size: 18,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        if (!hasVideo && widget.isActive)
+        if (isBuffering) ...[
+          const SizedBox(height: 6),
           Text(
-            'Buffering video...',
+            'Buffering…',
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.8),
+              color: Colors.white.withValues(alpha: 0.7),
               fontSize: 11,
-              fontWeight: FontWeight.w500,
             ),
           ),
+        ],
       ],
+    );
+  }
+
+  Widget _buildMuteButton() {
+    return GestureDetector(
+      onTap: widget.onToggleMute,
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.black.withValues(alpha: 0.55),
+        ),
+        child: Icon(
+          widget.isMuted ? Icons.volume_off : Icons.volume_up,
+          color: Colors.white,
+          size: 20,
+        ),
+      ),
     );
   }
 
   Widget _buildMediaLayer() {
     final controller = widget.controller;
     final hasVideo = controller != null && controller.value.isInitialized;
+    final chewieController = _chewieController;
+
+    // Build ChewieController lazily if the video player just became initialized.
+    if (hasVideo && chewieController == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(_rebuildChewieController);
+        }
+      });
+    }
 
     return Stack(
       fit: StackFit.expand,
@@ -1730,18 +1685,20 @@ class _FeedVideoPageState extends State<_FeedVideoPage> {
           AnimatedOpacity(
             opacity: hasVideo ? 0 : 1,
             duration: const Duration(milliseconds: 220),
-            child: Image.network(
-              _thumbnailUrl!,
+            child: CachedNetworkImage(
+              imageUrl: _thumbnailUrl!,
               fit: BoxFit.cover,
-              cacheHeight: 960,
-              cacheWidth: 540,
-              errorBuilder:
-                  (BuildContext context, Object error, StackTrace? stackTrace) {
-                    return Container(color: const Color(0xFF0B0B0B));
-                  },
+              memCacheHeight: 960,
+              memCacheWidth: 540,
+              placeholder: (BuildContext ctx, String url) =>
+                  Container(color: const Color(0xFF0B0B0B)),
+              errorWidget: (BuildContext ctx, String url, dynamic err) =>
+                  Container(color: const Color(0xFF0B0B0B)),
             ),
           ),
-        if (hasVideo)
+        if (hasVideo && chewieController != null)
+          Chewie(controller: chewieController),
+        if (hasVideo && chewieController == null)
           FittedBox(
             fit: BoxFit.cover,
             child: SizedBox(
@@ -1762,34 +1719,118 @@ class _FeedVideoPageState extends State<_FeedVideoPage> {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: _openFullScreen,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Hero(tag: 'video-card-${widget.index}', child: _buildMediaLayer()),
-          const Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Color(0x33000000),
-                    Color(0x00000000),
-                    Color(0x99000000),
-                  ],
+    final controller = widget.controller;
+    final isPlaying =
+        controller != null &&
+        controller.value.isInitialized &&
+        controller.value.isPlaying;
+
+    return VisibilityDetector(
+      key: Key('feed-vd-${widget.index}'),
+      onVisibilityChanged: (VisibilityInfo info) {
+        if (!mounted) return;
+        if (info.visibleFraction < 0.5) {
+          controller?.pause();
+        }
+      },
+      child: GestureDetector(
+        onTap: _togglePlayPause,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            _buildMediaLayer(),
+            const Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    stops: [0.0, 0.3, 0.7, 1.0],
+                    colors: [
+                      Color(0x88000000),
+                      Color(0x00000000),
+                      Color(0x00000000),
+                      Color(0xCC000000),
+                    ],
+                  ),
                 ),
               ),
             ),
+            if (!isPlaying &&
+                widget.isActive &&
+                controller != null &&
+                controller.value.isInitialized)
+              const Center(
+                child: Icon(
+                  Icons.play_arrow_rounded,
+                  color: Colors.white70,
+                  size: 64,
+                ),
+              ),
+            Positioned(top: 12, right: 12, child: _buildMuteButton()),
+            Positioned(right: 10, bottom: 80, child: _buildRightSidebar()),
+            Positioned(
+              left: 12,
+              right: 72,
+              bottom: 24,
+              child: _buildBottomOverlay(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SidebarAction extends StatelessWidget {
+  const _SidebarAction({
+    required this.icon,
+    required this.onTap,
+    this.label,
+    this.active = false,
+    this.iconColor = Colors.white,
+  });
+
+  final IconData icon;
+  final VoidCallback onTap;
+  final String? label;
+  final bool active;
+  final Color iconColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.black.withValues(alpha: 0.45),
+              border: active
+                  ? Border.all(color: const Color(0xFF00B4D8), width: 2)
+                  : null,
+            ),
+            child: Icon(
+              icon,
+              color: active ? const Color(0xFF00B4D8) : iconColor,
+              size: 22,
+            ),
           ),
-          Positioned(top: 14, left: 12, right: 12, child: _buildTopMeta()),
-          Positioned(
-            left: 12,
-            right: 12,
-            bottom: 20,
-            child: _buildBottomPanel(),
-          ),
+          if (label != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              label!,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ],
       ),
     );

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:unibuzz/interfaces/account_screen.dart';
 import 'package:unibuzz/interfaces/create_screen.dart';
 import 'package:unibuzz/interfaces/discover_screen.dart';
@@ -7,8 +8,9 @@ import 'package:unibuzz/interfaces/feed_screen.dart';
 import 'package:unibuzz/interfaces/login_screen.dart';
 import 'package:unibuzz/services/auth_service.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load();
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
