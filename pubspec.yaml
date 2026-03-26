@@ -42,7 +42,7 @@ dependencies:
   dio: ^5.0.0
   crypto: ^3.0.3
   shared_preferences: ^2.2.0
-  ffmpeg_kit_flutter_new: 
+  video_thumbnail: ^0.5.3
   chewie: ^1.8.0
   flutter_dotenv: ^5.2.1
   cached_network_image: ^3.3.1

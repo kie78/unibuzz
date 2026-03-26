@@ -7,8 +7,6 @@ import 'package:unibuzz/services/pending_upload_tracker_service.dart';
 import 'package:unibuzz/services/video_service.dart';
 import 'package:dio/dio.dart';
 import 'package:crypto/crypto.dart';
-import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
-import 'package:ffmpeg_kit_flutter_new/return_code.dart';
 import 'package:video_player/video_player.dart';
 
 class PublishScreen extends StatefulWidget {
@@ -22,7 +20,6 @@ class PublishScreen extends StatefulWidget {
 
 class _PublishScreenState extends State<PublishScreen> {
   static const int _maxUploadSizeBytes = 50 * 1024 * 1024;
-  static const int _compressionAttemptThresholdBytes = 16 * 1024 * 1024;
   static const Duration _processingPollInterval = Duration(seconds: 5);
   static const int _maxProcessingPollAttempts = 20;
 
@@ -42,8 +39,6 @@ class _PublishScreenState extends State<PublishScreen> {
   bool _stopProcessingPollRequested = false;
   int _processingPollAttempt = 0;
   String? _processingVideoId;
-  String? _temporaryCompressedVideoPath;
-
   bool get _isBusy => _isUploading || _isProcessingQueuedVideo;
 
   @override
@@ -298,81 +293,7 @@ class _PublishScreenState extends State<PublishScreen> {
       throw Exception('Selected video file no longer exists.');
     }
 
-    final sourceBytes = sourceFile.lengthSync();
-    if (sourceBytes < _compressionAttemptThresholdBytes) {
-      return sourcePath;
-    }
-
-    if (!(Platform.isAndroid || Platform.isIOS || Platform.isMacOS)) {
-      return sourcePath;
-    }
-
-    if (!mounted) {
-      return sourcePath;
-    }
-
-    setState(() {
-      _uploadMessage = 'Optimizing video for faster upload...';
-      _uploadProgress = _uploadProgress < 0.04 ? 0.04 : _uploadProgress;
-    });
-
-    try {
-      final compressedPath =
-          '${sourcePath.replaceAll(RegExp(r'\.[^.]+$'), '')}_compressed.mp4';
-      final session = await FFmpegKit.execute(
-        '-y -i "$sourcePath" -vcodec libx264 -crf 28 -preset fast '
-        '-acodec aac -b:a 128k -r 24 "$compressedPath"',
-      );
-      final returnCode = await session.getReturnCode();
-
-      if (!ReturnCode.isSuccess(returnCode)) {
-        return sourcePath;
-      }
-
-      final compressedFile = File(compressedPath);
-      if (!compressedFile.existsSync()) {
-        return sourcePath;
-      }
-
-      final compressedBytes = compressedFile.lengthSync();
-      if (compressedBytes <= 0 || compressedBytes >= sourceBytes) {
-        compressedFile.deleteSync();
-        return sourcePath;
-      }
-
-      _temporaryCompressedVideoPath = compressedPath;
-
-      if (!mounted) {
-        return compressedPath;
-      }
-
-      setState(() {
-        _uploadMessage = 'Video optimized. Uploading source video...';
-        _uploadProgress = _uploadProgress < 0.06 ? 0.06 : _uploadProgress;
-      });
-
-      return compressedPath;
-    } catch (_) {
-      return sourcePath;
-    }
-  }
-
-  void _cleanupTemporaryCompressedVideo() {
-    final tempPath = _temporaryCompressedVideoPath;
-    _temporaryCompressedVideoPath = null;
-
-    if (tempPath == null || tempPath.isEmpty) {
-      return;
-    }
-
-    try {
-      final file = File(tempPath);
-      if (file.existsSync()) {
-        file.deleteSync();
-      }
-    } catch (_) {
-      // Ignore cleanup failures for temporary compression output.
-    }
+    return sourcePath;
   }
 
   bool _hasPlayableVideoUrl(Map<String, dynamic> payload) {
@@ -929,9 +850,7 @@ class _PublishScreenState extends State<PublishScreen> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
-    } finally {
-      _cleanupTemporaryCompressedVideo();
-    }
+    } finally {}
   }
 
   void _onDiscardPressed() {
@@ -979,7 +898,6 @@ class _PublishScreenState extends State<PublishScreen> {
   @override
   void dispose() {
     _stopProcessingPollRequested = true;
-    _cleanupTemporaryCompressedVideo();
     _captionController.dispose();
     _hashtagController.dispose();
     _videoController?.dispose();

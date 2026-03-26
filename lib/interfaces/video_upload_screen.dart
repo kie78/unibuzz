@@ -3,6 +3,9 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:unibuzz/services/feed_cache_service.dart';
+import 'package:unibuzz/services/pending_upload_tracker_service.dart';
+import 'package:unibuzz/services/video_service.dart';
 import 'package:unibuzz/services/video_upload_service.dart';
 
 /// Three-step video upload screen:
@@ -134,7 +137,7 @@ class _VideoUploadScreenState extends State<VideoUploadScreen> {
     if (_isBusy) return;
 
     setState(() {
-      _phase = 'compressing';
+      _phase = 'uploading';
       _uploadProgress = 0.0;
       _statusMessage = 'Validating video…';
       _errorMessage = null;
@@ -144,19 +147,7 @@ class _VideoUploadScreenState extends State<VideoUploadScreen> {
       // ── Validate size ────────────────────────────────────────────────────
       VideoUploadService.validateFileSize(videoPath);
 
-      // ── STEP 1a: Compress ────────────────────────────────────────────────
-      setState(() => _statusMessage = 'Compressing video to 720p…');
-
-      _deleteTempCompressed();
-      final String pathToUpload = await VideoUploadService.compressVideo(
-        inputPath: videoPath,
-        onCompressedPathReady: (p) => _tempCompressedPath = p,
-      );
-
-      if (!mounted) return;
-
-      // Re-validate size after compression (belt-and-suspenders).
-      VideoUploadService.validateFileSize(pathToUpload);
+      final String pathToUpload = videoPath;
 
       // ── STEP 1b: Upload to Cloudinary ────────────────────────────────────
       setState(() {
@@ -198,13 +189,14 @@ class _VideoUploadScreenState extends State<VideoUploadScreen> {
 
       if (!mounted) return;
 
-      // ── STEP 3: Start non-blocking status polling ─────────────────────────
+      // ── STEP 3: Poll processing status ───────────────────────────────────
       setState(() {
         _phase = 'processing';
         _statusMessage = 'Video is being processed…';
       });
 
-      _showProcessingBanner();
+      await PendingUploadTrackerService.addPendingUpload(backendResult.videoId);
+      if (!mounted) return;
 
       _pollingTimer = VideoUploadService.startProcessingPoller(
         videoId: backendResult.videoId,
@@ -212,19 +204,72 @@ class _VideoUploadScreenState extends State<VideoUploadScreen> {
           if (!mounted) return;
           setState(() => _statusMessage = 'Processing: $status');
         },
-        onDone: () {
+        onDone: (finalStatus) async {
           if (!mounted) return;
-          setState(() {
-            _phase = 'done';
-            _statusMessage = 'Your video is ready!';
-          });
+
+          if (finalStatus == 'failed') {
+            await PendingUploadTrackerService.removePendingUpload(
+              backendResult.videoId,
+            );
+            if (!mounted) return;
+            setState(() {
+              _phase = 'idle';
+              _statusMessage = '';
+              _errorMessage = null;
+              _uploadProgress = 0.0;
+            });
+            ScaffoldMessenger.of(context)
+              ..hideCurrentSnackBar()
+              ..showSnackBar(
+                SnackBar(
+                  content: const Text('Video upload failed. Please try again.'),
+                  action: SnackBarAction(
+                    label: 'Retry',
+                    onPressed: () {
+                      if (mounted) _startUpload();
+                    },
+                  ),
+                ),
+              );
+            return;
+          }
+
+          if (finalStatus == 'timeout') {
+            await PendingUploadTrackerService.removePendingUpload(
+              backendResult.videoId,
+            );
+            if (!mounted) return;
+            setState(() {
+              _phase = 'done';
+              _statusMessage =
+                  'Something went wrong processing your video. Please try uploading again.';
+            });
+            return;
+          }
+
+          // Processing succeeded — wait 5 s for Redis cache to settle,
+          // then warm the feed cache and navigate away.
+          setState(() => _statusMessage = 'Video is live! Loading feed…');
+          await Future.delayed(const Duration(seconds: 5));
+          if (!mounted) return;
+
+          try {
+            final freshVideos = await VideoService.fetchFeed();
+            if (!mounted) return;
+            if (freshVideos.isNotEmpty) {
+              await FeedCacheService.cacheResponse(freshVideos);
+            }
+          } catch (_) {
+            // Cache warm-up is best-effort; do not block navigation.
+          }
+
+          await PendingUploadTrackerService.removePendingUpload(
+            backendResult.videoId,
+          );
+          if (!mounted) return;
+          Navigator.of(context).pop(true);
         },
       );
-
-      // Do NOT block the UI after kicking off polling — the user can
-      // navigate away. Navigation happens immediately.
-      if (!mounted) return;
-      Navigator.of(context).pop(true);
     } catch (e) {
       final message = e.toString().replaceFirst('Exception: ', '').trim();
       if (!mounted) return;
@@ -247,16 +292,6 @@ class _VideoUploadScreenState extends State<VideoUploadScreen> {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  void _showProcessingBanner() {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Your video is being processed. You can keep browsing!'),
-        duration: Duration(seconds: 6),
-      ),
-    );
   }
 
   void _confirmDiscard() {

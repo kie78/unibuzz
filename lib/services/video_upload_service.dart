@@ -2,8 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
-import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
-import 'package:ffmpeg_kit_flutter_new/return_code.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:unibuzz/services/api_client.dart';
 
@@ -44,53 +42,6 @@ class VideoUploadService {
         'Please keep uploads under 50 MB.',
       );
     }
-  }
-
-  /// Compresses [inputPath] to 720p / ~3 Mbps using FFmpeg.
-  /// Returns the path to the compressed file, or [inputPath] on failure.
-  /// Stores the compressed file path in [onCompressedPathReady] so the
-  /// caller can delete it when done.
-  static Future<String> compressVideo({
-    required String inputPath,
-    required void Function(String compressedPath) onCompressedPathReady,
-  }) async {
-    if (!(Platform.isAndroid || Platform.isIOS || Platform.isMacOS)) {
-      return inputPath;
-    }
-
-    final compressedPath =
-        '${inputPath.replaceAll(RegExp(r'\.[^.]+$'), '')}_compressed.mp4';
-
-    final session = await FFmpegKit.execute(
-      '-y -i "$inputPath" '
-      '-vcodec libx264 -b:v 3000k -crf 23 -preset fast '
-      '-vf "scale=-2:720" '
-      '-acodec aac -b:a 128k '
-      '"$compressedPath"',
-    );
-
-    final returnCode = await session.getReturnCode();
-
-    if (!ReturnCode.isSuccess(returnCode)) {
-      // Compression failed – use original file.
-      return inputPath;
-    }
-
-    final compressedFile = File(compressedPath);
-    if (!compressedFile.existsSync()) {
-      return inputPath;
-    }
-
-    final compressedBytes = compressedFile.lengthSync();
-    final originalBytes = File(inputPath).lengthSync();
-
-    if (compressedBytes <= 0 || compressedBytes >= originalBytes) {
-      compressedFile.deleteSync();
-      return inputPath;
-    }
-
-    onCompressedPathReady(compressedPath);
-    return compressedPath;
   }
 
   /// Uploads [filePath] to Cloudinary via multipart/form-data.
@@ -217,12 +168,16 @@ class VideoUploadService {
   // ─── STEP 3 ──────────────────────────────────────────────────────────────
 
   /// Polls GET /api/videos/:videoId/status every 5 s.
-  /// Calls [onStatus] on each response and [onDone] when processing terminates.
+  /// Calls [onStatus] on each poll. When polling terminates, calls [onDone]
+  /// with one of three final statuses:
+  ///   - 'failed'  : backend reported failure; stop immediately.
+  ///   - 'timeout' : [maxAttempts] exhausted and still pending.
+  ///   - the raw status string (e.g. 'processed') on success.
   /// Stops after [maxAttempts] regardless of status.
   static Timer startProcessingPoller({
     required String videoId,
     required void Function(String status) onStatus,
-    required void Function() onDone,
+    required Future<void> Function(String finalStatus) onDone,
     int maxAttempts = 20,
   }) {
     int attempt = 0;
@@ -242,14 +197,26 @@ class VideoUploadService {
 
         onStatus(status);
 
-        if (_isTerminalStatus(status) || attempt >= maxAttempts) {
+        if (status == 'failed' || status == 'error' || status == 'rejected') {
           timer.cancel();
-          onDone();
+          await onDone('failed');
+          return;
+        }
+
+        if (_isTerminalStatus(status)) {
+          timer.cancel();
+          await onDone(status);
+          return;
+        }
+
+        if (attempt >= maxAttempts) {
+          timer.cancel();
+          await onDone('timeout');
         }
       } catch (_) {
         if (attempt >= maxAttempts) {
           timer.cancel();
-          onDone();
+          await onDone('timeout');
         }
       }
     });
