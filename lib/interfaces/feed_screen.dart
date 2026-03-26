@@ -1535,43 +1535,45 @@ class _FeedVideoPageState extends State<_FeedVideoPage> {
     setState(() {});
   }
 
-  Widget _buildRightSidebar() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _buildAvatarWidget(
-          radius: 22,
-          backgroundColor: const Color(0xFF00B4D8),
-          imageUrl: _authorAvatarUrl,
-          iconColor: Colors.white,
-          iconSize: 22,
-        ),
-        const SizedBox(height: 24),
-        _SidebarAction(
-          icon: Icons.arrow_upward_rounded,
-          label: (_upvotes ?? 0).toString(),
-          active: _voteState == 1,
-          onTap: _handleUpvote,
-        ),
-        const SizedBox(height: 20),
-        _SidebarAction(
-          icon: Icons.arrow_downward_rounded,
-          active: _voteState == -1,
-          onTap: _handleDownvote,
-        ),
-        const SizedBox(height: 20),
-        _SidebarAction(
-          icon: Icons.chat_bubble_outline_rounded,
-          label: (_commentsCount ?? 0).toString(),
-          onTap: _openComments,
-        ),
-        const SizedBox(height: 20),
-        _SidebarAction(
-          icon: Icons.flag_outlined,
-          iconColor: const Color(0xFFFF7A7A),
-          onTap: _openReport,
-        ),
-      ],
+  Widget _buildInlineActionsRow() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          _buildAvatarWidget(
+            radius: 16,
+            backgroundColor: const Color(0xFF00B4D8),
+            imageUrl: _authorAvatarUrl,
+            iconColor: Colors.white,
+            iconSize: 16,
+          ),
+          const SizedBox(width: 10),
+          _InlineActionPill(
+            icon: Icons.arrow_upward_rounded,
+            label: (_upvotes ?? 0).toString(),
+            active: _voteState == 1,
+            onTap: _handleUpvote,
+          ),
+          const SizedBox(width: 8),
+          _InlineActionPill(
+            icon: Icons.arrow_downward_rounded,
+            active: _voteState == -1,
+            onTap: _handleDownvote,
+          ),
+          const SizedBox(width: 8),
+          _InlineActionPill(
+            icon: Icons.chat_bubble_outline_rounded,
+            label: (_commentsCount ?? 0).toString(),
+            onTap: _openComments,
+          ),
+          const SizedBox(width: 8),
+          _InlineIconAction(
+            icon: Icons.flag_outlined,
+            iconColor: const Color(0xFFFF7A7A),
+            onTap: _openReport,
+          ),
+        ],
+      ),
     );
   }
 
@@ -1640,6 +1642,8 @@ class _FeedVideoPageState extends State<_FeedVideoPage> {
             ),
           ),
         ],
+        const SizedBox(height: 10),
+        _buildInlineActionsRow(),
       ],
     );
   }
@@ -1768,10 +1772,9 @@ class _FeedVideoPageState extends State<_FeedVideoPage> {
                 ),
               ),
             Positioned(top: 12, right: 12, child: _buildMuteButton()),
-            Positioned(right: 10, bottom: 80, child: _buildRightSidebar()),
             Positioned(
               left: 12,
-              right: 72,
+              right: 12,
               bottom: 24,
               child: _buildBottomOverlay(),
             ),
@@ -1782,56 +1785,85 @@ class _FeedVideoPageState extends State<_FeedVideoPage> {
   }
 }
 
-class _SidebarAction extends StatelessWidget {
-  const _SidebarAction({
+class _InlineActionPill extends StatelessWidget {
+  const _InlineActionPill({
     required this.icon,
     required this.onTap,
     this.label,
     this.active = false,
-    this.iconColor = Colors.white,
   });
 
   final IconData icon;
   final VoidCallback onTap;
   final String? label;
   final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(999),
+          color: Colors.black.withValues(alpha: 0.42),
+          border: Border.all(
+            color: active
+                ? const Color(0xFF00B4D8)
+                : Colors.white.withValues(alpha: 0.24),
+            width: active ? 1.6 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              color: active ? const Color(0xFF00B4D8) : Colors.white,
+              size: 18,
+            ),
+            if (label != null) ...[
+              const SizedBox(width: 6),
+              Text(
+                label!,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InlineIconAction extends StatelessWidget {
+  const _InlineIconAction({
+    required this.icon,
+    required this.onTap,
+    this.iconColor = Colors.white,
+  });
+
+  final IconData icon;
+  final VoidCallback onTap;
   final Color iconColor;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.black.withValues(alpha: 0.45),
-              border: active
-                  ? Border.all(color: const Color(0xFF00B4D8), width: 2)
-                  : null,
-            ),
-            child: Icon(
-              icon,
-              color: active ? const Color(0xFF00B4D8) : iconColor,
-              size: 22,
-            ),
-          ),
-          if (label != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              label!,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ],
+      child: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.black.withValues(alpha: 0.45),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+        ),
+        child: Icon(icon, color: iconColor, size: 18),
       ),
     );
   }
