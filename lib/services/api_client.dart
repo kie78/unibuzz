@@ -4,7 +4,7 @@ import 'package:unibuzz/services/auth_service.dart';
 class ApiClient {
   ApiClient._();
   static final ApiClient instance = ApiClient._();
-  static const String _baseUrl = 'https://unibuzz-api.onrender.com';
+  static const String _baseUrl = 'https://unibuzz-api-sdzh.onrender.com';
 
   late final Dio dio = _buildDio();
 

@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class AuthService {
-  static const String _defaultBaseUrl = 'https://unibuzz-api.onrender.com';
+  static const String _defaultBaseUrl = 'https://unibuzz-api-sdzh.onrender.com';
   static final FlutterSecureStorage _storage = FlutterSecureStorage();
   static const Duration _startupExpirySkew = Duration(seconds: 30);
   static const String _profileFullNameKey = 'profile_full_name';
