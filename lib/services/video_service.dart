@@ -449,6 +449,23 @@ class VideoService {
     return _processResponse(response);
   }
 
+  /// GET /api/me/videos — returns all videos owned by the authenticated user,
+  /// including pending ones, with inline upvotes, downvotes, and comment counts.
+  static Future<List<dynamic>> getMyVideos() async {
+    final response = await _dio.get<dynamic>('/api/me/videos');
+    final dynamic data = response.data;
+    final int statusCode = response.statusCode ?? 0;
+    if (statusCode >= 200 && statusCode < 300) {
+      if (data is List<dynamic>) {
+        return _processVideoList(data);
+      }
+      return <dynamic>[];
+    }
+    throw Exception(
+      _extractErrorMessage(decoded: data, statusCode: statusCode),
+    );
+  }
+
   /// GET /api/me/comment-filters
   static Future<List<Map<String, dynamic>>> getCommentFilters() async {
     final response = await _dio.get<dynamic>('/api/me/comment-filters');

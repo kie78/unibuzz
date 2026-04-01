@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:unibuzz/interfaces/edit_post_screen.dart';
-import 'package:unibuzz/services/auth_service.dart';
 import 'package:unibuzz/services/video_service.dart';
 
 class MyPostsScreen extends StatefulWidget {
@@ -11,9 +10,6 @@ class MyPostsScreen extends StatefulWidget {
 }
 
 class _MyPostsScreenState extends State<MyPostsScreen> {
-  static const int _feedPageSize = 20;
-  static const int _maxFeedPagesToScan = 5;
-
   bool _isLoading = true;
   String? _error;
   List<_PostItem> _posts = <_PostItem>[];
@@ -28,34 +24,11 @@ class _MyPostsScreenState extends State<MyPostsScreen> {
     return error.toString().replaceFirst('Exception: ', '').trim();
   }
 
-  dynamic _readValueForPath(Map<String, dynamic> data, String path) {
-    final List<String> segments = path.split('.');
-    dynamic current = data;
-
-    for (final String segment in segments) {
-      if (current is Map<String, dynamic>) {
-        current = current[segment];
-      } else if (current is Map) {
-        current = current[segment];
-      } else {
-        return null;
-      }
-    }
-
-    return current;
-  }
-
-  String? _readNonEmptyString(Map<String, dynamic> data, List<String> paths) {
-    for (final String path in paths) {
-      final dynamic value = _readValueForPath(data, path);
+  String? _readNonEmptyString(Map<String, dynamic> data, List<String> keys) {
+    for (final String key in keys) {
+      final dynamic value = data[key];
       if (value is String && value.trim().isNotEmpty) {
         return value.trim();
-      }
-      if (value is num || value is bool) {
-        final String text = value.toString().trim();
-        if (text.isNotEmpty) {
-          return text;
-        }
       }
     }
     return null;
@@ -65,39 +38,22 @@ class _MyPostsScreenState extends State<MyPostsScreen> {
     return _readNonEmptyString(video, <String>['id', 'video_id']);
   }
 
-  String? _extractOwnerUserId(Map<String, dynamic> video) {
-    return _readNonEmptyString(video, <String>['user_id', 'user.id', 'author_id']);
-  }
-
   String? _extractCreatedAt(Map<String, dynamic> video) {
     return _readNonEmptyString(video, <String>['created_at']);
   }
 
   DateTime? _parseDate(String? rawDate) {
-    if (rawDate == null || rawDate.isEmpty) {
-      return null;
-    }
+    if (rawDate == null || rawDate.isEmpty) return null;
     return DateTime.tryParse(rawDate)?.toLocal();
   }
 
   String _formatRelativeTime(DateTime createdAt) {
     final Duration difference = DateTime.now().difference(createdAt);
-
-    if (difference.inSeconds < 60) {
-      return 'Just now';
-    }
-    if (difference.inMinutes < 60) {
-      return '${difference.inMinutes} min ago';
-    }
-    if (difference.inHours < 24) {
-      return '${difference.inHours} h ago';
-    }
-    if (difference.inDays < 7) {
-      return '${difference.inDays} d ago';
-    }
-    if (difference.inDays < 30) {
-      return '${(difference.inDays / 7).floor()} w ago';
-    }
+    if (difference.inSeconds < 60) return 'Just now';
+    if (difference.inMinutes < 60) return '${difference.inMinutes} min ago';
+    if (difference.inHours < 24) return '${difference.inHours} h ago';
+    if (difference.inDays < 7) return '${difference.inDays} d ago';
+    if (difference.inDays < 30) return '${(difference.inDays / 7).floor()} w ago';
 
     final String day = createdAt.day.toString().padLeft(2, '0');
     final String month = createdAt.month.toString().padLeft(2, '0');
@@ -105,49 +61,24 @@ class _MyPostsScreenState extends State<MyPostsScreen> {
     return '$day/$month/$year';
   }
 
-  String? _findOldestCreatedAt(List<dynamic> videos) {
-    DateTime? oldestDate;
-    String? oldestRaw;
-
-    for (final dynamic item in videos) {
-      if (item is! Map) {
-        continue;
-      }
-
-      final Map<String, dynamic> map = Map<String, dynamic>.from(item);
-      final String? createdAt = _extractCreatedAt(map);
-      if (createdAt == null) {
-        continue;
-      }
-
-      final DateTime? parsed = DateTime.tryParse(createdAt);
-      if (parsed == null) {
-        continue;
-      }
-
-      if (oldestDate == null || parsed.isBefore(oldestDate)) {
-        oldestDate = parsed;
-        oldestRaw = createdAt;
-      }
-    }
-
-    return oldestRaw;
+  int _parseCount(dynamic value) {
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 
   _PostItem _mapToPostItem(Map<String, dynamic> raw) {
     final String id = _extractPostId(raw) ?? 'post-${raw.hashCode}';
     final DateTime? createdAt = _parseDate(_extractCreatedAt(raw));
-
-    final String caption = _readNonEmptyString(raw, <String>['caption', 'description']) ??
+    final String caption =
+        _readNonEmptyString(raw, <String>['caption', 'description']) ??
         'No caption';
-
     final String? thumbnailUrl = _readNonEmptyString(raw, <String>[
       'thumbnail_url',
       'thumbnail',
       'preview_url',
-      'media.thumbnail_url',
-      'media.preview_url',
     ]);
+    final String? status = raw['status'] as String?;
 
     return _PostItem(
       id: id,
@@ -155,72 +86,10 @@ class _MyPostsScreenState extends State<MyPostsScreen> {
       timestamp: createdAt == null ? 'Recently' : _formatRelativeTime(createdAt),
       caption: caption,
       thumbnailUrl: thumbnailUrl,
-      upvotes: 0,
-      downvotes: 0,
-      comments: 0,
-    );
-  }
-
-  int? _parseCount(dynamic value) {
-    if (value is int) {
-      return value;
-    }
-    return int.tryParse(value?.toString() ?? '');
-  }
-
-  Future<void> _loadPostMetrics(String postId) async {
-    int? upvotes;
-    int? downvotes;
-    int? comments;
-
-    try {
-      final Map<String, dynamic> votes = await VideoService.getVideoVotes(
-        videoId: postId,
-      );
-      final dynamic nested = votes['data'];
-      final Map<dynamic, dynamic> payload = nested is Map ? nested : votes;
-      upvotes = _parseCount(payload['upvotes']);
-      downvotes = _parseCount(payload['downvotes']);
-    } catch (_) {
-      // Keep defaults if this request fails.
-    }
-
-    try {
-      final List<dynamic> rawComments = await VideoService.getComments(
-        videoId: postId,
-      );
-      comments = rawComments.length;
-    } catch (_) {
-      // Keep defaults if this request fails.
-    }
-
-    if (!mounted) {
-      return;
-    }
-
-    if (upvotes == null && downvotes == null && comments == null) {
-      return;
-    }
-
-    setState(() {
-      final int index = _posts.indexWhere((post) => post.id == postId);
-      if (index < 0) {
-        return;
-      }
-
-      final _PostItem current = _posts[index];
-      _posts[index] = current.copyWith(
-        upvotes: upvotes ?? current.upvotes,
-        downvotes: downvotes ?? current.downvotes,
-        comments: comments ?? current.comments,
-      );
-    });
-  }
-
-  Future<void> _loadAllPostMetrics() async {
-    final List<_PostItem> snapshot = List<_PostItem>.from(_posts);
-    await Future.wait<void>(
-      snapshot.map((post) => _loadPostMetrics(post.id)),
+      status: status,
+      upvotes: _parseCount(raw['upvotes']),
+      downvotes: _parseCount(raw['downvotes']),
+      comments: _parseCount(raw['comments']),
     );
   }
 
@@ -237,91 +106,22 @@ class _MyPostsScreenState extends State<MyPostsScreen> {
     }
 
     try {
-      final String? currentUserId = await AuthService.getCurrentUserId();
-      if (currentUserId == null || currentUserId.isEmpty) {
-        throw Exception('Session expired. Please log in again.');
-      }
+      final List<dynamic> rawVideos = await VideoService.getMyVideos();
 
-      final List<Map<String, dynamic>> ownPostsRaw = <Map<String, dynamic>>[];
-      final Set<String> seenPostIds = <String>{};
-      String? beforeCursor;
-
-      for (int page = 0; page < _maxFeedPagesToScan; page++) {
-        final List<dynamic> pageItems = await VideoService.fetchFeed(
-          before: beforeCursor,
-          limit: _feedPageSize,
-        );
-
-        if (pageItems.isEmpty) {
-          break;
-        }
-
-        for (final dynamic item in pageItems) {
-          if (item is! Map) {
-            continue;
-          }
-
-          final Map<String, dynamic> map = Map<String, dynamic>.from(item);
-          final String? ownerUserId = _extractOwnerUserId(map);
-          if (ownerUserId != currentUserId) {
-            continue;
-          }
-
-          final String? postId = _extractPostId(map);
-          if (postId == null || postId.isEmpty || !seenPostIds.add(postId)) {
-            continue;
-          }
-
-          ownPostsRaw.add(map);
-        }
-
-        final String? nextCursor = _findOldestCreatedAt(pageItems);
-        if (nextCursor == null || nextCursor.isEmpty) {
-          break;
-        }
-
-        if (pageItems.length < _feedPageSize) {
-          break;
-        }
-
-        beforeCursor = nextCursor;
-      }
-
-      final List<_PostItem> mappedPosts = ownPostsRaw
+      final List<_PostItem> mappedPosts = rawVideos
+          .whereType<Map<String, dynamic>>()
           .map(_mapToPostItem)
-          .toList()
-        ..sort((a, b) {
-          final DateTime? aDate = a.createdAt;
-          final DateTime? bDate = b.createdAt;
-          if (aDate == null && bDate == null) {
-            return 0;
-          }
-          if (aDate == null) {
-            return 1;
-          }
-          if (bDate == null) {
-            return -1;
-          }
-          return bDate.compareTo(aDate);
-        });
+          .toList();
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       setState(() {
         _posts = mappedPosts;
         _isLoading = false;
         _error = null;
       });
-
-      if (mappedPosts.isNotEmpty) {
-        await _loadAllPostMetrics();
-      }
     } catch (error) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       final String message = _exceptionText(error);
       if (!showLoading && _posts.isNotEmpty) {
@@ -411,10 +211,7 @@ class _MyPostsScreenState extends State<MyPostsScreen> {
             Text(
               _error ?? 'Unable to load your posts right now.',
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Color(0xFFB8B8B8),
-                fontSize: 14,
-              ),
+              style: const TextStyle(color: Color(0xFFB8B8B8), fontSize: 14),
             ),
             const SizedBox(height: 14),
             ElevatedButton(
@@ -569,26 +366,24 @@ class _PostCard extends StatelessWidget {
     return Image.network(
       thumbnailUrl,
       fit: BoxFit.cover,
-      loadingBuilder:
-          (
-            BuildContext context,
-            Widget child,
-            ImageChunkEvent? loadingProgress,
-          ) {
-            if (loadingProgress == null) {
-              return child;
-            }
-            return fallback();
-          },
-      errorBuilder:
-          (BuildContext context, Object error, StackTrace? stackTrace) {
-            return fallback();
-          },
+      loadingBuilder: (
+        BuildContext context,
+        Widget child,
+        ImageChunkEvent? loadingProgress,
+      ) {
+        if (loadingProgress == null) return child;
+        return fallback();
+      },
+      errorBuilder: (BuildContext context, Object error, StackTrace? stackTrace) {
+        return fallback();
+      },
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final bool isPending = post.status == 'pending';
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
@@ -601,21 +396,57 @@ class _PostCard extends StatelessWidget {
           Stack(
             alignment: Alignment.center,
             children: <Widget>[
-              SizedBox(width: double.infinity, height: 180, child: _buildThumbnail()),
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.12),
-                  border: Border.all(color: const Color(0xFF00B4D8), width: 2),
-                ),
-                child: const Icon(
-                  Icons.play_arrow,
-                  color: Color(0xFF00B4D8),
-                  size: 28,
-                ),
+              SizedBox(
+                width: double.infinity,
+                height: 180,
+                child: _buildThumbnail(),
               ),
+              if (!isPending)
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withValues(alpha: 0.12),
+                    border: Border.all(color: const Color(0xFF00B4D8), width: 2),
+                  ),
+                  child: const Icon(
+                    Icons.play_arrow,
+                    color: Color(0xFF00B4D8),
+                    size: 28,
+                  ),
+                ),
+              // Processing overlay for pending posts
+              if (isPending)
+                Container(
+                  width: double.infinity,
+                  height: 180,
+                  color: Colors.black.withValues(alpha: 0.45),
+                  child: const Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        SizedBox(
+                          width: 28,
+                          height: 28,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            color: Colors.white,
+                          ),
+                        ),
+                        SizedBox(height: 10),
+                        Text(
+                          'Processing…',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               Positioned(
                 top: 12,
                 right: 12,
@@ -659,11 +490,7 @@ class _PostCard extends StatelessWidget {
                 Expanded(
                   child: Row(
                     children: <Widget>[
-                      const Icon(
-                        Icons.arrow_upward,
-                        size: 18,
-                        color: Color(0xFF999999),
-                      ),
+                      const Icon(Icons.arrow_upward, size: 18, color: Color(0xFF999999)),
                       const SizedBox(width: 6),
                       Text(
                         '${post.upvotes}',
@@ -678,11 +505,7 @@ class _PostCard extends StatelessWidget {
                 Expanded(
                   child: Row(
                     children: <Widget>[
-                      const Icon(
-                        Icons.arrow_downward,
-                        size: 18,
-                        color: Color(0xFF999999),
-                      ),
+                      const Icon(Icons.arrow_downward, size: 18, color: Color(0xFF999999)),
                       const SizedBox(width: 6),
                       Text(
                         '${post.downvotes}',
@@ -697,11 +520,7 @@ class _PostCard extends StatelessWidget {
                 Expanded(
                   child: Row(
                     children: <Widget>[
-                      const Icon(
-                        Icons.message_outlined,
-                        size: 18,
-                        color: Color(0xFF999999),
-                      ),
+                      const Icon(Icons.message_outlined, size: 18, color: Color(0xFF999999)),
                       const SizedBox(width: 6),
                       Text(
                         '${post.comments}',
@@ -792,6 +611,7 @@ class _PostItem {
     required this.timestamp,
     required this.caption,
     required this.thumbnailUrl,
+    required this.status,
     required this.upvotes,
     required this.downvotes,
     required this.comments,
@@ -802,24 +622,8 @@ class _PostItem {
   final String timestamp;
   final String caption;
   final String? thumbnailUrl;
+  final String? status;
   final int upvotes;
   final int downvotes;
   final int comments;
-
-  _PostItem copyWith({
-    int? upvotes,
-    int? downvotes,
-    int? comments,
-  }) {
-    return _PostItem(
-      id: id,
-      createdAt: createdAt,
-      timestamp: timestamp,
-      caption: caption,
-      thumbnailUrl: thumbnailUrl,
-      upvotes: upvotes ?? this.upvotes,
-      downvotes: downvotes ?? this.downvotes,
-      comments: comments ?? this.comments,
-    );
-  }
 }
