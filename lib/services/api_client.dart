@@ -4,7 +4,7 @@ import 'package:unibuzz/services/auth_service.dart';
 class ApiClient {
   ApiClient._();
   static final ApiClient instance = ApiClient._();
-  static const String _baseUrl = 'https://unibuzz-api-sdzh.onrender.com';
+  static const String _baseUrl = 'https://unibuzz-api.onrender.com';
 
   late final Dio dio = _buildDio();
 
@@ -68,9 +68,7 @@ class ApiClient {
     if (token.toLowerCase().startsWith('bearer ')) {
       token = token.substring(7).trim();
     }
-    if (token.length >= 2 &&
-        token.startsWith('"') &&
-        token.endsWith('"')) {
+    if (token.length >= 2 && token.startsWith('"') && token.endsWith('"')) {
       token = token.substring(1, token.length - 1).trim();
     }
     return token;
