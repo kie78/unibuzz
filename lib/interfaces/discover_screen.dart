@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:unibuzz/app_colors.dart';
 import 'package:unibuzz/interfaces/full_screen_view.dart';
 import 'package:unibuzz/services/video_service.dart';
 
@@ -289,7 +290,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     return RefreshIndicator(
       onRefresh: _retrySearch,
       color: const Color(0xFF00B4D8),
-      backgroundColor: const Color(0xFF1A1A1A),
+      backgroundColor: context.cardBg,
       child: ListView.separated(
         physics: const AlwaysScrollableScrollPhysics(
           parent: BouncingScrollPhysics(),
@@ -319,12 +320,12 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.search_off, color: Colors.white, size: 34),
+            Icon(Icons.search_off, color: context.primaryText, size: 34),
             const SizedBox(height: 12),
             Text(
               'Search failed',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: Colors.white,
+                color: context.primaryText,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -372,7 +373,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               'No results for $label',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                color: Colors.white,
+                color: context.primaryText,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -382,7 +383,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               textAlign: TextAlign.center,
               style: Theme.of(
                 context,
-              ).textTheme.bodySmall?.copyWith(color: const Color(0xFF999999)),
+              ).textTheme.bodySmall?.copyWith(color: context.secondaryText),
             ),
           ],
         ),
@@ -421,7 +422,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0B0B0B),
+      backgroundColor: context.scaffoldBg,
       body: SafeArea(
         child: Column(
           children: [
@@ -440,10 +441,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
+                  Text(
                     'EXPLORE COMMUNITIES',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: context.primaryText,
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                       letterSpacing: 1.2,
@@ -453,7 +454,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   // Fixed Search Bar
                   TextField(
                     controller: _searchController,
-                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                    style: TextStyle(color: context.primaryText, fontSize: 14),
                     cursorColor: const Color(0xFF00B4D8),
                     onSubmitted: (value) {
                       _searchDebounce?.cancel();
@@ -483,7 +484,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                             )
                           : null,
                       filled: true,
-                      fillColor: const Color(0xFF121212),
+                      fillColor: context.inputFillBg,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(24),
                         borderSide: BorderSide.none,
@@ -829,7 +830,7 @@ class _DiscoverResultCard extends StatelessWidget {
       },
       child: Container(
         decoration: BoxDecoration(
-          color: const Color(0xFF1A1A1A),
+          color: context.cardBg,
           borderRadius: BorderRadius.circular(14),
         ),
         child: Column(
@@ -855,8 +856,8 @@ class _DiscoverResultCard extends StatelessWidget {
                           _displayName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: context.primaryText,
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
                           ),
@@ -866,8 +867,8 @@ class _DiscoverResultCard extends StatelessWidget {
                             _profileMeta,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Color(0xFF999999),
+                            style: TextStyle(
+                              color: context.secondaryText,
                               fontSize: 11,
                               fontWeight: FontWeight.w500,
                             ),
@@ -877,8 +878,8 @@ class _DiscoverResultCard extends StatelessWidget {
                   ),
                   Text(
                     _timestampLabel,
-                    style: const TextStyle(
-                      color: Color(0xFF8A8A8A),
+                    style: TextStyle(
+                      color: context.tertiaryText,
                       fontSize: 10,
                       fontWeight: FontWeight.w500,
                     ),
@@ -958,8 +959,8 @@ class _DiscoverResultCard extends StatelessWidget {
                 children: [
                   Text(
                     _caption,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: context.primaryText,
                       fontSize: 13,
                       fontWeight: FontWeight.w400,
                     ),
@@ -1001,7 +1002,7 @@ class _TagPill extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: const Color(0xFF1A1A1A),
+          color: context.cardBg,
           border: isSelected
               ? Border.all(color: const Color(0xFF00B4D8), width: 2)
               : null,
@@ -1031,8 +1032,8 @@ class _TagPill extends StatelessWidget {
             Flexible(
               child: Text(
                 tag,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: context.primaryText,
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
                 ),

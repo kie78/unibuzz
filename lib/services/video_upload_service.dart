@@ -122,13 +122,12 @@ class VideoUploadService {
     String? caption,
     List<String>? tags,
   }) async {
-    final encodedUrl = Uri.encodeComponent(secureUrl);
     final tagString = tags != null && tags.isNotEmpty
         ? tags.take(10).map((t) => t.replaceAll('#', '')).join(',')
         : null;
 
     final queryParams = <String, String>{
-      'input_url': encodedUrl,
+      'input_url': secureUrl,
       if (caption != null && caption.trim().isNotEmpty)
         'caption': caption.trim(),
       if (tagString != null && tagString.isNotEmpty) 'tags': tagString,

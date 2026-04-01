@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:unibuzz/app_colors.dart';
 import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
 import 'package:unibuzz/interfaces/comment_section.dart';
@@ -713,7 +714,7 @@ class FeedScreenState extends State<FeedScreen> with WidgetsBindingObserver {
           const Spacer(),
           IconButton(
             onPressed: _isLoading ? null : _refreshFeed,
-            icon: const Icon(Icons.refresh, color: Colors.white, size: 20),
+            icon: Icon(Icons.refresh, color: context.iconColor, size: 20),
             tooltip: 'Refresh feed',
           ),
           const SizedBox(width: 4),
@@ -724,7 +725,7 @@ class FeedScreenState extends State<FeedScreen> with WidgetsBindingObserver {
             ),
             child: _buildAvatarWidget(
               radius: 18,
-              backgroundColor: const Color(0xFF1A1A1A),
+              backgroundColor: context.cardBg,
               imageUrl: _currentUserAvatarUrl,
               iconColor: const Color(0xFF00B4D8),
               iconSize: 20,
@@ -753,12 +754,12 @@ class FeedScreenState extends State<FeedScreen> with WidgetsBindingObserver {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.wifi_off, color: Colors.white, size: 32),
+            Icon(Icons.wifi_off, color: context.primaryText, size: 32),
             const SizedBox(height: 12),
             Text(
               'Couldn\'t load your feed',
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: Colors.white,
+                color: context.primaryText,
                 fontWeight: FontWeight.w600,
               ),
               textAlign: TextAlign.center,
@@ -768,7 +769,7 @@ class FeedScreenState extends State<FeedScreen> with WidgetsBindingObserver {
               _error ?? 'Something went wrong.',
               style: Theme.of(
                 context,
-              ).textTheme.bodySmall?.copyWith(color: const Color(0xFF999999)),
+              ).textTheme.bodySmall?.copyWith(color: context.secondaryText),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
@@ -847,7 +848,7 @@ class FeedScreenState extends State<FeedScreen> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0B0B0B),
+      backgroundColor: context.scaffoldBg,
       body: SafeArea(
         child: Column(
           children: [

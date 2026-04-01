@@ -144,12 +144,23 @@ class AuthService {
     }
 
     final payload = _decodeJwtPayload(token);
-    if (payload == null || _isTokenExpired(payload)) {
+    if (payload == null) {
       await logout();
       return false;
     }
 
-    return true;
+    if (!_isTokenExpired(payload)) {
+      return true;
+    }
+
+    // Access token expired — try to refresh before forcing a logout.
+    try {
+      await refreshAccessToken();
+      return true;
+    } catch (_) {
+      await logout();
+      return false;
+    }
   }
 
   static Future<String?> getCurrentUserId() async {
