@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:video_player/video_player.dart';
 
 /// Manages a pool of VideoPlayerController instances for efficient preloading.
@@ -43,39 +45,43 @@ class VideoPlayerPoolService {
     }
   }
 
-  /// Preloads the next video controller in the background.
+  /// Preloads the next two video controllers in the background.
   Future<void> preloadNext(int currentIndex) async {
     _currentPageIndex = currentIndex;
 
-    // Preload next page
-    if (currentIndex + 1 < videoUrls.length) {
-      await getController(currentIndex + 1);
+    // Preload next two pages
+    for (int i = 1; i <= 2; i++) {
+      if (currentIndex + i < videoUrls.length) {
+        unawaited(getController(currentIndex + i));
+      }
     }
 
-    // Cleanup pages further than 1 away
+    // Cleanup pages further than 2 away
     _cleanupFarPages(currentIndex);
   }
 
-  /// Preloads previous and next pages around current index.
+  /// Preloads previous page and the next two pages around current index.
   Future<void> preloadAround(int currentIndex) async {
     _currentPageIndex = currentIndex;
 
     if (currentIndex - 1 >= 0) {
-      await getController(currentIndex - 1);
+      unawaited(getController(currentIndex - 1));
     }
 
-    if (currentIndex + 1 < videoUrls.length) {
-      await getController(currentIndex + 1);
+    for (int i = 1; i <= 2; i++) {
+      if (currentIndex + i < videoUrls.length) {
+        unawaited(getController(currentIndex + i));
+      }
     }
 
     _cleanupFarPages(currentIndex);
   }
 
-  /// Disposes controllers that are more than 1 page away from current.
+  /// Disposes controllers that are more than 2 pages away from current.
   void _cleanupFarPages(int currentIndex) {
     final keysToDispose = <int>[];
     for (final index in _controllers.keys) {
-      if ((index - currentIndex).abs() > 1) {
+      if ((index - currentIndex).abs() > 2) {
         keysToDispose.add(index);
       }
     }

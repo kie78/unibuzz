@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:unibuzz/app_colors.dart';
 import 'package:unibuzz/interfaces/comment_filters_screen.dart';
 import 'package:unibuzz/interfaces/login_screen.dart';
 import 'package:unibuzz/interfaces/my_posts_screen.dart';
@@ -6,9 +7,16 @@ import 'package:unibuzz/interfaces/profile_screen.dart';
 import 'package:unibuzz/services/auth_service.dart';
 
 class AccountScreen extends StatelessWidget {
-  const AccountScreen({super.key, this.onBackPressed});
+  const AccountScreen({
+    super.key,
+    this.onBackPressed,
+    this.themeMode,
+    this.onThemeToggle,
+  });
 
   final VoidCallback? onBackPressed;
+  final ThemeMode? themeMode;
+  final VoidCallback? onThemeToggle;
 
   void _handleBack(BuildContext context) {
     final NavigatorState navigator = Navigator.of(context);
@@ -32,19 +40,21 @@ class AccountScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool isDark = (themeMode ?? ThemeMode.dark) == ThemeMode.dark;
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0B0B0B),
+      backgroundColor: context.scaffoldBg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0B0B0B),
+        backgroundColor: context.appBarBg,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          icon: Icon(Icons.arrow_back, color: context.primaryText),
           onPressed: () => _handleBack(context),
         ),
         title: Text(
           'Unibuzz',
           style: Theme.of(context).textTheme.titleLarge?.copyWith(
-            color: const Color(0xFF00B4D8),
+            color: context.accent,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -53,7 +63,6 @@ class AccountScreen extends StatelessWidget {
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
-            // Page Title
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
@@ -61,18 +70,17 @@ class AccountScreen extends StatelessWidget {
                   'Account',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: Colors.white,
+                    color: context.primaryText,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
             ),
-            // Settings List Card
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Card(
-                  color: const Color(0xFF1A1A1A),
+                  color: context.cardBg,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -80,7 +88,6 @@ class AccountScreen extends StatelessWidget {
                   margin: EdgeInsets.zero,
                   child: Column(
                     children: [
-                      // Profile Item
                       _buildSettingsItem(
                         context,
                         icon: Icons.person,
@@ -88,19 +95,17 @@ class AccountScreen extends StatelessWidget {
                         onTap: () {
                           Navigator.of(context).push(
                             MaterialPageRoute<void>(
-                              builder: (BuildContext context) =>
-                                  const ProfileScreen(),
+                              builder: (_) => const ProfileScreen(),
                             ),
                           );
                         },
                       ),
-                      const Divider(
-                        color: Color(0xFF2A2A2A),
+                      Divider(
+                        color: context.dividerColor,
                         height: 1,
                         indent: 16,
                         endIndent: 16,
                       ),
-                      // My Posts Item
                       _buildSettingsItem(
                         context,
                         icon: Icons.videocam,
@@ -108,19 +113,17 @@ class AccountScreen extends StatelessWidget {
                         onTap: () {
                           Navigator.of(context).push(
                             MaterialPageRoute<void>(
-                              builder: (BuildContext context) =>
-                                  const MyPostsScreen(),
+                              builder: (_) => const MyPostsScreen(),
                             ),
                           );
                         },
                       ),
-                      const Divider(
-                        color: Color(0xFF2A2A2A),
+                      Divider(
+                        color: context.dividerColor,
                         height: 1,
                         indent: 16,
                         endIndent: 16,
                       ),
-                      // Comment Filters Item
                       _buildSettingsItem(
                         context,
                         icon: Icons.filter_list,
@@ -128,19 +131,66 @@ class AccountScreen extends StatelessWidget {
                         onTap: () {
                           Navigator.of(context).push(
                             MaterialPageRoute<void>(
-                              builder: (BuildContext context) =>
-                                  const CommentFiltersScreen(),
+                              builder: (_) => const CommentFiltersScreen(),
                             ),
                           );
                         },
-                        isLast: true,
+                      ),
+                      Divider(
+                        color: context.dividerColor,
+                        height: 1,
+                        indent: 16,
+                        endIndent: 16,
+                      ),
+                      // Theme toggle
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: onThemeToggle,
+                          splashColor: Colors.white.withValues(alpha: 0.05),
+                          highlightColor: Colors.white.withValues(alpha: 0.03),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 16,
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  isDark
+                                      ? Icons.light_mode_outlined
+                                      : Icons.dark_mode_outlined,
+                                  color: context.accent,
+                                  size: 24,
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Text(
+                                    isDark ? 'Light Mode' : 'Dark Mode',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyLarge
+                                        ?.copyWith(
+                                          color: context.primaryText,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                  ),
+                                ),
+                                Switch(
+                                  value: !isDark,
+                                  onChanged: (_) => onThemeToggle?.call(),
+                                  activeColor: context.accent,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                   ),
                 ),
               ),
             ),
-            // Logout Button
             SliverFillRemaining(
               hasScrollBody: false,
               child: Padding(
@@ -152,7 +202,7 @@ class AccountScreen extends StatelessWidget {
                       width: double.infinity,
                       height: 48,
                       child: Material(
-                        color: const Color(0xFF1A1A1A),
+                        color: context.cardBg,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(24),
                         ),
@@ -164,7 +214,7 @@ class AccountScreen extends StatelessWidget {
                               'Logout',
                               style: Theme.of(context).textTheme.bodyLarge
                                   ?.copyWith(
-                                    color: const Color(0xFF00B4D8),
+                                    color: context.accent,
                                     fontWeight: FontWeight.w600,
                                   ),
                             ),
@@ -187,7 +237,6 @@ class AccountScreen extends StatelessWidget {
     required IconData icon,
     required String label,
     required VoidCallback onTap,
-    bool isLast = false,
   }) {
     return Material(
       color: Colors.transparent,
@@ -199,18 +248,18 @@ class AccountScreen extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           child: Row(
             children: [
-              Icon(icon, color: const Color(0xFF00B4D8), size: 24),
+              Icon(icon, color: context.accent, size: 24),
               const SizedBox(width: 16),
               Expanded(
                 child: Text(
                   label,
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Colors.white,
+                    color: context.primaryText,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
               ),
-              Icon(Icons.chevron_right, color: Colors.white, size: 24),
+              Icon(Icons.chevron_right, color: context.chevronColor, size: 24),
             ],
           ),
         ),

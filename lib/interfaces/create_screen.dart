@@ -6,7 +6,11 @@ import 'package:image_picker/image_picker.dart';
 import 'package:unibuzz/interfaces/video_upload_screen.dart';
 
 class CreateScreen extends StatefulWidget {
-  const CreateScreen({super.key});
+  const CreateScreen({super.key, this.onUploadSuccess});
+
+  /// Called by VideoUploadScreen when an upload completes. The shell uses this
+  /// to switch to the Feed tab and trigger a refresh.
+  final VoidCallback? onUploadSuccess;
 
   @override
   State<CreateScreen> createState() => _CreateScreenState();
@@ -309,8 +313,10 @@ class _CreateScreenState extends State<CreateScreen> {
 
       await Navigator.of(context).push<bool>(
         MaterialPageRoute<bool>(
-          builder: (_) =>
-              VideoUploadScreen(initialVideoPath: selectedVideo.path),
+          builder: (_) => VideoUploadScreen(
+            initialVideoPath: selectedVideo.path,
+            onUploadSuccess: widget.onUploadSuccess,
+          ),
         ),
       );
     } catch (error) {
@@ -342,7 +348,10 @@ class _CreateScreenState extends State<CreateScreen> {
     try {
       await Navigator.of(context).push<bool>(
         MaterialPageRoute<bool>(
-          builder: (_) => VideoUploadScreen(initialVideoPath: _readyVideoPath),
+          builder: (_) => VideoUploadScreen(
+            initialVideoPath: _readyVideoPath,
+            onUploadSuccess: widget.onUploadSuccess,
+          ),
         ),
       );
     } catch (error) {

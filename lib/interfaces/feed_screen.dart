@@ -47,10 +47,11 @@ class FeedScreen extends StatefulWidget {
   const FeedScreen({super.key});
 
   @override
-  State<FeedScreen> createState() => _FeedScreenState();
+  State<FeedScreen> createState() => FeedScreenState();
 }
 
-class _FeedScreenState extends State<FeedScreen> with WidgetsBindingObserver {
+// Public so PrimaryNavShell can call refreshFeed() via GlobalKey.
+class FeedScreenState extends State<FeedScreen> with WidgetsBindingObserver {
   static const Duration _avatarSyncInterval = Duration(seconds: 20);
 
   bool _isLoading = true;
@@ -225,6 +226,12 @@ class _FeedScreenState extends State<FeedScreen> with WidgetsBindingObserver {
       _loadFeed(preserveExisting: true),
       _loadCurrentUserAvatar(force: true),
     ]);
+  }
+
+  /// Public entry-point used by PrimaryNavShell (via GlobalKey) to trigger a
+  /// full feed reload after a successful upload.
+  void refreshFeed() {
+    _loadFeed(preserveExisting: false);
   }
 
   String? _extractVideoId(dynamic video) {

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:unibuzz/app_colors.dart';
 import 'package:unibuzz/interfaces/edit_post_screen.dart';
+import 'package:unibuzz/interfaces/full_screen_view.dart';
 import 'package:unibuzz/services/video_service.dart';
 
 class MyPostsScreen extends StatefulWidget {
@@ -34,13 +36,11 @@ class _MyPostsScreenState extends State<MyPostsScreen> {
     return null;
   }
 
-  String? _extractPostId(Map<String, dynamic> video) {
-    return _readNonEmptyString(video, <String>['id', 'video_id']);
-  }
+  String? _extractPostId(Map<String, dynamic> video) =>
+      _readNonEmptyString(video, <String>['id', 'video_id']);
 
-  String? _extractCreatedAt(Map<String, dynamic> video) {
-    return _readNonEmptyString(video, <String>['created_at']);
-  }
+  String? _extractCreatedAt(Map<String, dynamic> video) =>
+      _readNonEmptyString(video, <String>['created_at']);
 
   DateTime? _parseDate(String? rawDate) {
     if (rawDate == null || rawDate.isEmpty) return null;
@@ -48,17 +48,16 @@ class _MyPostsScreenState extends State<MyPostsScreen> {
   }
 
   String _formatRelativeTime(DateTime createdAt) {
-    final Duration difference = DateTime.now().difference(createdAt);
-    if (difference.inSeconds < 60) return 'Just now';
-    if (difference.inMinutes < 60) return '${difference.inMinutes} min ago';
-    if (difference.inHours < 24) return '${difference.inHours} h ago';
-    if (difference.inDays < 7) return '${difference.inDays} d ago';
-    if (difference.inDays < 30) return '${(difference.inDays / 7).floor()} w ago';
-
-    final String day = createdAt.day.toString().padLeft(2, '0');
-    final String month = createdAt.month.toString().padLeft(2, '0');
-    final String year = (createdAt.year % 100).toString().padLeft(2, '0');
-    return '$day/$month/$year';
+    final Duration diff = DateTime.now().difference(createdAt);
+    if (diff.inSeconds < 60) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
+    if (diff.inHours < 24) return '${diff.inHours} h ago';
+    if (diff.inDays < 7) return '${diff.inDays} d ago';
+    if (diff.inDays < 30) return '${(diff.inDays / 7).floor()} w ago';
+    final String d = createdAt.day.toString().padLeft(2, '0');
+    final String m = createdAt.month.toString().padLeft(2, '0');
+    final String y = (createdAt.year % 100).toString().padLeft(2, '0');
+    return '$d/$m/$y';
   }
 
   int _parseCount(dynamic value) {
@@ -78,18 +77,23 @@ class _MyPostsScreenState extends State<MyPostsScreen> {
       'thumbnail',
       'preview_url',
     ]);
+    final String? videoUrl =
+        _readNonEmptyString(raw, <String>['video_url', 'url']);
     final String? status = raw['status'] as String?;
 
     return _PostItem(
       id: id,
       createdAt: createdAt,
-      timestamp: createdAt == null ? 'Recently' : _formatRelativeTime(createdAt),
+      timestamp:
+          createdAt == null ? 'Recently' : _formatRelativeTime(createdAt),
       caption: caption,
       thumbnailUrl: thumbnailUrl,
+      videoUrl: videoUrl,
       status: status,
       upvotes: _parseCount(raw['upvotes']),
       downvotes: _parseCount(raw['downvotes']),
       comments: _parseCount(raw['comments']),
+      rawVideo: Map<String, dynamic>.from(raw),
     );
   }
 
@@ -107,14 +111,12 @@ class _MyPostsScreenState extends State<MyPostsScreen> {
 
     try {
       final List<dynamic> rawVideos = await VideoService.getMyVideos();
-
       final List<_PostItem> mappedPosts = rawVideos
           .whereType<Map<String, dynamic>>()
           .map(_mapToPostItem)
           .toList();
 
       if (!mounted) return;
-
       setState(() {
         _posts = mappedPosts;
         _isLoading = false;
@@ -122,20 +124,39 @@ class _MyPostsScreenState extends State<MyPostsScreen> {
       });
     } catch (error) {
       if (!mounted) return;
-
       final String message = _exceptionText(error);
       if (!showLoading && _posts.isNotEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message)),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(message)));
         return;
       }
-
       setState(() {
         _isLoading = false;
         _error = message;
       });
     }
+  }
+
+  void _handlePlayPost(_PostItem post) {
+    if (post.status == 'pending' ||
+        post.videoUrl == null ||
+        post.videoUrl!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This video is still processing. Please check back shortly.'),
+        ),
+      );
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => FullScreenVideoView(
+          cardIndex: 0,
+          video: post.rawVideo,
+        ),
+      ),
+    );
   }
 
   void _handleEditPost(_PostItem post) {
@@ -151,22 +172,19 @@ class _MyPostsScreenState extends State<MyPostsScreen> {
       context: context,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
-          backgroundColor: const Color(0xFF1A1A1A),
-          title: const Text(
+          backgroundColor: context.cardBg,
+          title: Text(
             'Delete Post',
-            style: TextStyle(color: Colors.white),
+            style: TextStyle(color: context.primaryText),
           ),
-          content: const Text(
+          content: Text(
             'Are you sure you want to delete this post? This action cannot be undone.',
-            style: TextStyle(color: Color(0xFFB8B8B8)),
+            style: TextStyle(color: context.secondaryText),
           ),
           actions: <Widget>[
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(color: Color(0xFF00B4D8)),
-              ),
+              child: Text('Cancel', style: TextStyle(color: context.accent)),
             ),
             TextButton(
               onPressed: () {
@@ -194,8 +212,8 @@ class _MyPostsScreenState extends State<MyPostsScreen> {
   }
 
   Widget _buildLoadingState() {
-    return const Center(
-      child: CircularProgressIndicator(color: Color(0xFF00B4D8)),
+    return Center(
+      child: CircularProgressIndicator(color: context.accent),
     );
   }
 
@@ -206,18 +224,18 @@ class _MyPostsScreenState extends State<MyPostsScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            const Icon(Icons.error_outline, color: Colors.white, size: 34),
+            Icon(Icons.error_outline, color: context.primaryText, size: 34),
             const SizedBox(height: 12),
             Text(
               _error ?? 'Unable to load your posts right now.',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Color(0xFFB8B8B8), fontSize: 14),
+              style: TextStyle(color: context.secondaryText, fontSize: 14),
             ),
             const SizedBox(height: 14),
             ElevatedButton(
               onPressed: _loadMyPosts,
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF00B4D8),
+                backgroundColor: context.accent,
                 foregroundColor: Colors.black,
               ),
               child: const Text('Retry'),
@@ -231,8 +249,8 @@ class _MyPostsScreenState extends State<MyPostsScreen> {
   Widget _buildEmptyState() {
     return RefreshIndicator(
       onRefresh: () => _loadMyPosts(showLoading: false),
-      color: const Color(0xFF00B4D8),
-      backgroundColor: const Color(0xFF1A1A1A),
+      color: context.accent,
+      backgroundColor: context.cardBg,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(
           parent: BouncingScrollPhysics(),
@@ -245,19 +263,19 @@ class _MyPostsScreenState extends State<MyPostsScreen> {
                 Icon(
                   Icons.video_library_outlined,
                   size: 64,
-                  color: Colors.white.withValues(alpha: 0.3),
+                  color: context.primaryText.withValues(alpha: 0.3),
                 ),
                 const SizedBox(height: 16),
                 Text(
                   'No posts yet',
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Colors.white.withValues(alpha: 0.5),
+                    color: context.primaryText.withValues(alpha: 0.5),
                   ),
                 ),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   'Pull down to refresh after you publish.',
-                  style: TextStyle(color: Color(0xFF8C8C8C), fontSize: 12),
+                  style: TextStyle(color: context.tertiaryText, fontSize: 12),
                 ),
               ],
             ),
@@ -270,8 +288,8 @@ class _MyPostsScreenState extends State<MyPostsScreen> {
   Widget _buildPostsList() {
     return RefreshIndicator(
       onRefresh: () => _loadMyPosts(showLoading: false),
-      color: const Color(0xFF00B4D8),
-      backgroundColor: const Color(0xFF1A1A1A),
+      color: context.accent,
+      backgroundColor: context.cardBg,
       child: ListView.builder(
         physics: const AlwaysScrollableScrollPhysics(
           parent: BouncingScrollPhysics(),
@@ -282,6 +300,7 @@ class _MyPostsScreenState extends State<MyPostsScreen> {
           final _PostItem post = _posts[index];
           return _PostCard(
             post: post,
+            onPlay: () => _handlePlayPost(post),
             onEdit: () => _handleEditPost(post),
             onDelete: () => _handleDeletePost(post),
           );
@@ -304,18 +323,18 @@ class _MyPostsScreenState extends State<MyPostsScreen> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0B0B0B),
+      backgroundColor: context.scaffoldBg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0B0B0B),
+        backgroundColor: context.appBarBg,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          icon: Icon(Icons.arrow_back, color: context.primaryText),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
           'My Posts',
           style: Theme.of(context).textTheme.titleLarge?.copyWith(
-            color: Colors.white,
+            color: context.primaryText,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -329,15 +348,17 @@ class _MyPostsScreenState extends State<MyPostsScreen> {
 class _PostCard extends StatelessWidget {
   const _PostCard({
     required this.post,
+    required this.onPlay,
     required this.onEdit,
     required this.onDelete,
   });
 
   final _PostItem post;
+  final VoidCallback onPlay;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
-  Widget _buildThumbnail() {
+  Widget _buildThumbnail(BuildContext context) {
     final String? thumbnailUrl = post.thumbnailUrl;
 
     Widget fallback() {
@@ -350,124 +371,127 @@ class _PostCard extends StatelessWidget {
           ),
         ),
         child: Center(
-          child: Icon(
-            Icons.play_circle_outline,
-            color: Colors.white,
-            size: 38,
-          ),
+          child: Icon(Icons.play_circle_outline, color: Colors.white, size: 38),
         ),
       );
     }
 
-    if (thumbnailUrl == null || thumbnailUrl.isEmpty) {
-      return fallback();
-    }
+    if (thumbnailUrl == null || thumbnailUrl.isEmpty) return fallback();
 
     return Image.network(
       thumbnailUrl,
       fit: BoxFit.cover,
-      loadingBuilder: (
-        BuildContext context,
-        Widget child,
-        ImageChunkEvent? loadingProgress,
-      ) {
-        if (loadingProgress == null) return child;
-        return fallback();
-      },
-      errorBuilder: (BuildContext context, Object error, StackTrace? stackTrace) {
-        return fallback();
-      },
+      loadingBuilder: (_, Widget child, ImageChunkEvent? progress) =>
+          progress == null ? child : fallback(),
+      errorBuilder: (_, __, ___) => fallback(),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final bool isPending = post.status == 'pending';
+    final bool canPlay = !isPending &&
+        post.videoUrl != null &&
+        post.videoUrl!.isNotEmpty;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
+        color: context.cardBg,
         borderRadius: BorderRadius.circular(12),
       ),
       clipBehavior: Clip.hardEdge,
       child: Column(
         children: <Widget>[
-          Stack(
-            alignment: Alignment.center,
-            children: <Widget>[
-              SizedBox(
-                width: double.infinity,
-                height: 180,
-                child: _buildThumbnail(),
-              ),
-              if (!isPending)
-                Container(
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.white.withValues(alpha: 0.12),
-                    border: Border.all(color: const Color(0xFF00B4D8), width: 2),
-                  ),
-                  child: const Icon(
-                    Icons.play_arrow,
-                    color: Color(0xFF00B4D8),
-                    size: 28,
-                  ),
-                ),
-              // Processing overlay for pending posts
-              if (isPending)
-                Container(
+          // ── Thumbnail / video preview ──────────────────────────────────
+          GestureDetector(
+            onTap: onPlay,
+            child: Stack(
+              alignment: Alignment.center,
+              children: <Widget>[
+                SizedBox(
                   width: double.infinity,
                   height: 180,
-                  color: Colors.black.withValues(alpha: 0.45),
-                  child: const Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: <Widget>[
-                        SizedBox(
-                          width: 28,
-                          height: 28,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            color: Colors.white,
+                  child: _buildThumbnail(context),
+                ),
+                // Processing overlay
+                if (isPending)
+                  Container(
+                    width: double.infinity,
+                    height: 180,
+                    color: Colors.black.withValues(alpha: 0.50),
+                    child: const Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          SizedBox(
+                            width: 28,
+                            height: 28,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: Colors.white,
+                            ),
                           ),
-                        ),
-                        SizedBox(height: 10),
-                        Text(
-                          'Processing…',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
+                          SizedBox(height: 10),
+                          Text(
+                            'Processing…',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
+                    ),
+                  ),
+                // Play button (only for ready videos)
+                if (canPlay)
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.15),
+                      border: Border.all(
+                        color: const Color(0xFF00B4D8),
+                        width: 2,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.play_arrow,
+                      color: Color(0xFF00B4D8),
+                      size: 28,
+                    ),
+                  ),
+                // Timestamp badge
+                Positioned(
+                  top: 12,
+                  right: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      post.timestamp,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),
-              Positioned(
-                top: 12,
-                right: 12,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.6),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    post.timestamp,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
+
+          // ── Caption ────────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 2),
             child: Align(
@@ -477,12 +501,14 @@ class _PostCard extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.white,
+                  color: context.primaryText,
                   fontWeight: FontWeight.w500,
                 ),
               ),
             ),
           ),
+
+          // ── Metrics ────────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
@@ -490,52 +516,46 @@ class _PostCard extends StatelessWidget {
                 Expanded(
                   child: Row(
                     children: <Widget>[
-                      const Icon(Icons.arrow_upward, size: 18, color: Color(0xFF999999)),
+                      Icon(Icons.arrow_upward,
+                          size: 18, color: context.tertiaryText),
                       const SizedBox(width: 6),
-                      Text(
-                        '${post.upvotes}',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: const Color(0xFFB8B8B8),
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
+                      Text('${post.upvotes}',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: context.secondaryText)),
                     ],
                   ),
                 ),
                 Expanded(
                   child: Row(
                     children: <Widget>[
-                      const Icon(Icons.arrow_downward, size: 18, color: Color(0xFF999999)),
+                      Icon(Icons.arrow_downward,
+                          size: 18, color: context.tertiaryText),
                       const SizedBox(width: 6),
-                      Text(
-                        '${post.downvotes}',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: const Color(0xFFB8B8B8),
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
+                      Text('${post.downvotes}',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: context.secondaryText)),
                     ],
                   ),
                 ),
                 Expanded(
                   child: Row(
                     children: <Widget>[
-                      const Icon(Icons.message_outlined, size: 18, color: Color(0xFF999999)),
+                      Icon(Icons.message_outlined,
+                          size: 18, color: context.tertiaryText),
                       const SizedBox(width: 6),
-                      Text(
-                        '${post.comments}',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: const Color(0xFFB8B8B8),
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
+                      Text('${post.comments}',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: context.secondaryText)),
                     ],
                   ),
                 ),
               ],
             ),
           ),
-          const Divider(color: Color(0xFF2A2A2A), height: 1, thickness: 1),
+
+          Divider(color: context.dividerColor, height: 1, thickness: 1),
+
+          // ── Actions ────────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
@@ -552,7 +572,6 @@ class _PostCard extends StatelessWidget {
                           vertical: 9,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.transparent,
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
                             color: const Color(0xFF00B4D8),
@@ -611,10 +630,12 @@ class _PostItem {
     required this.timestamp,
     required this.caption,
     required this.thumbnailUrl,
+    required this.videoUrl,
     required this.status,
     required this.upvotes,
     required this.downvotes,
     required this.comments,
+    required this.rawVideo,
   });
 
   final String id;
@@ -622,8 +643,12 @@ class _PostItem {
   final String timestamp;
   final String caption;
   final String? thumbnailUrl;
+  final String? videoUrl;
   final String? status;
   final int upvotes;
   final int downvotes;
   final int comments;
+
+  /// The original API response map — passed directly to FullScreenVideoView.
+  final Map<String, dynamic> rawVideo;
 }

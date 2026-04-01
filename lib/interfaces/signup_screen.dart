@@ -176,7 +176,7 @@ class _SignupScreenState extends State<SignupScreen> {
                 _buildInputField(
                   label: 'UNIVERSITY EMAIL',
                   controller: _emailController,
-                  hintText: 'student@university.edu',
+                  hintText: '2023bit019@std.must.ac.ug',
                   enabled: !_isLoading,
                   keyboardType: TextInputType.emailAddress,
                 ),
@@ -197,7 +197,7 @@ class _SignupScreenState extends State<SignupScreen> {
                 _buildInputField(
                   label: 'UNIVERSITY',
                   controller: _universityController,
-                  hintText: 'Makerere University',
+                  hintText: 'Mbarara University',
                   enabled: !_isLoading,
                 ),
 

@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class FeedCacheService {
   static const String _cacheKey = 'unibuzz_feed_cache';
   static const String _cacheTimestampKey = 'unibuzz_feed_cache_timestamp';
-  static const Duration _cacheTtl = Duration(minutes: 5);
+  static const Duration _cacheTtl = Duration(minutes: 30);
 
   /// Gets the cached feed response if available and not stale.
   static Future<List<dynamic>?> getCachedFeed() async {

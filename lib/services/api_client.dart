@@ -30,32 +30,39 @@ class ApiClient {
           }
           return handler.next(options);
         },
-        onError: (error, handler) async {
-          if (error.response?.statusCode == 401) {
+        // validateStatus: (_) => true means Dio never triggers onError for HTTP
+        // status codes — handle 401 here in onResponse instead.
+        onResponse: (response, handler) async {
+          if (response.statusCode == 401 &&
+              !response.requestOptions.path.contains('/auth/')) {
             try {
               await AuthService.refreshAccessToken();
               final token = await AuthService.getAccessToken();
               final opts = Options(
-                method: error.requestOptions.method,
+                method: response.requestOptions.method,
                 headers: Map<String, dynamic>.from(
-                  error.requestOptions.headers,
+                  response.requestOptions.headers,
                 ),
               );
               if (token != null) {
                 opts.headers!['Authorization'] =
                     'Bearer ${_normalizeToken(token)}';
               }
-              final response = await client.request<dynamic>(
-                error.requestOptions.path,
-                data: error.requestOptions.data,
-                queryParameters: error.requestOptions.queryParameters,
+              final retried = await client.request<dynamic>(
+                response.requestOptions.path,
+                data: response.requestOptions.data,
+                queryParameters: response.requestOptions.queryParameters,
                 options: opts,
               );
-              return handler.resolve(response);
+              return handler.resolve(retried);
             } catch (_) {
               await AuthService.logout();
             }
           }
+          return handler.next(response);
+        },
+        onError: (error, handler) async {
+          // Handles network-level failures (timeouts, no connection, etc.)
           return handler.next(error);
         },
       ),

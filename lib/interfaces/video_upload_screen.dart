@@ -13,10 +13,14 @@ import 'package:unibuzz/services/video_upload_service.dart';
 ///   2. Submit Cloudinary URL to UniBuzz backend
 ///   3. Poll processing status non-blocking in background
 class VideoUploadScreen extends StatefulWidget {
-  const VideoUploadScreen({super.key, this.initialVideoPath});
+  const VideoUploadScreen({super.key, this.initialVideoPath, this.onUploadSuccess});
 
   /// If provided, the screen starts with this video already selected.
   final String? initialVideoPath;
+
+  /// Called just before popping on a successful upload. The shell uses this
+  /// to switch to the Feed tab and trigger a refresh.
+  final VoidCallback? onUploadSuccess;
 
   @override
   State<VideoUploadScreen> createState() => _VideoUploadScreenState();
@@ -267,6 +271,8 @@ class _VideoUploadScreenState extends State<VideoUploadScreen> {
             backendResult.videoId,
           );
           if (!mounted) return;
+          // Notify the shell to switch to the Feed tab and refresh before pop.
+          widget.onUploadSuccess?.call();
           Navigator.of(context).pop(true);
         },
       );

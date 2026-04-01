@@ -151,7 +151,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           fontSize: 14,
                         ),
                         decoration: InputDecoration(
-                          hintText: 'student@university.edu',
+                          hintText: '2023bit019@std.must.ac.ug',
                           hintStyle: TextStyle(
                             color: Colors.white.withValues(alpha: 0.4),
                             fontSize: 14,
