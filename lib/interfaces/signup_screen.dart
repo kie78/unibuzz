@@ -56,15 +56,8 @@ class _SignupScreenState extends State<SignupScreen> {
       _signupError = null;
     });
     try {
-      if (_selectedYear == null) {
-        setState(() {
-          _signupError = 'Please select your year of study.';
-          _isLoading = false;
-        });
-        return;
-      }
-      // Map year string to int
-      int yearInt = _yearOptions.indexOf(_selectedYear!) + 1;
+      final int yearInt =
+          _selectedYear != null ? _yearOptions.indexOf(_selectedYear!) + 1 : 0;
       await AuthService.register(
         fullName: _fullNameController.text.trim(),
         username: _usernameController.text.trim(),
@@ -172,11 +165,11 @@ class _SignupScreenState extends State<SignupScreen> {
 
                 const SizedBox(height: 20),
 
-                // University Email Input
+                // Email Input
                 _buildInputField(
-                  label: 'UNIVERSITY EMAIL',
+                  label: 'EMAIL',
                   controller: _emailController,
-                  hintText: '2023bit019@std.must.ac.ug',
+                  hintText: 'your@email.com',
                   enabled: !_isLoading,
                   keyboardType: TextInputType.emailAddress,
                 ),

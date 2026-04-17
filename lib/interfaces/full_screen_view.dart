@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import 'package:unibuzz/interfaces/comment_section.dart';
+import 'package:unibuzz/providers/comment_provider.dart';
 import 'package:unibuzz/services/video_service.dart';
 import 'package:video_player/video_player.dart';
 
@@ -65,13 +67,16 @@ class _FullScreenVideoViewState extends State<FullScreenVideoView> {
   int? _upvotes;
   int? _commentsCount;
 
-  String? get _videoId {
-    final id = widget.video['id'];
-    if (id is String && id.isNotEmpty) {
-      return id;
-    }
-    return null;
-  }
+  String? get _videoId => VideoService.extractVideoId(widget.video);
+
+  String? get _videoOwnerId => _readNonEmptyString(<String>[
+        'user_id',
+        'author_id',
+        'user.id',
+        'user.user_id',
+        'author.id',
+        'author.user_id',
+      ]);
 
   dynamic _readValueForPath(String path) {
     final segments = path.split('.');
@@ -744,7 +749,13 @@ class _FullScreenVideoViewState extends State<FullScreenVideoView> {
                                 await showModalBottomSheet<int>(
                                   context: context,
                                   builder: (BuildContext context) =>
-                                      CommentSheet(videoId: videoId),
+                                      ChangeNotifierProvider(
+                                        create: (_) => CommentProvider(
+                                          videoId: videoId,
+                                          videoOwnerId: _videoOwnerId,
+                                        ),
+                                        child: const CommentSheet(),
+                                      ),
                                   isScrollControlled: true,
                                   backgroundColor: Colors.transparent,
                                 );

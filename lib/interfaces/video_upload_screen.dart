@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:unibuzz/services/auth_service.dart';
 import 'package:unibuzz/services/feed_cache_service.dart';
 import 'package:unibuzz/services/pending_upload_tracker_service.dart';
 import 'package:unibuzz/services/video_service.dart';
@@ -139,6 +140,38 @@ class _VideoUploadScreenState extends State<VideoUploadScreen> {
       return;
     }
     if (_isBusy) return;
+
+    // Verify the user holds a Mbarara University email before spending bandwidth.
+    final email = await AuthService.getCachedEmail();
+    if (email == null || !AuthService.isUniversityEmail(email)) {
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFF1A1A1A),
+          title: const Text(
+            'Feature Not Available',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+          content: const Text(
+            'Video uploads are available to Mbarara University students only.\n\n'
+            'Please sign in with your university email ending in '
+            '@std.must.ac.ug to access this feature.',
+            style: TextStyle(color: Color(0xFFCCCCCC), height: 1.5),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text(
+                'Got it',
+                style: TextStyle(color: Color(0xFF00B4D8)),
+              ),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
 
     setState(() {
       _phase = 'uploading';

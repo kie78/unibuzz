@@ -1,18 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:unibuzz/interfaces/account_screen.dart';
 import 'package:unibuzz/interfaces/create_screen.dart';
 import 'package:unibuzz/interfaces/discover_screen.dart';
 import 'package:unibuzz/interfaces/feed_screen.dart';
 import 'package:unibuzz/interfaces/login_screen.dart';
+import 'package:unibuzz/providers/comment_filters_provider.dart';
 import 'package:unibuzz/services/auth_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load();
-  runApp(const MyApp());
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => CommentFiltersProvider()),
+      ],
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatefulWidget {

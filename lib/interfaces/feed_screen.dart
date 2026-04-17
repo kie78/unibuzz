@@ -4,7 +4,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:unibuzz/app_colors.dart';
 import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:unibuzz/interfaces/comment_section.dart';
+import 'package:unibuzz/providers/comment_provider.dart';
 import 'package:unibuzz/interfaces/report_screen.dart';
 import 'package:unibuzz/services/auth_service.dart';
 import 'package:unibuzz/services/feed_cache_service.dart';
@@ -236,12 +238,7 @@ class FeedScreenState extends State<FeedScreen> with WidgetsBindingObserver {
   }
 
   String? _extractVideoId(dynamic video) {
-    if (video is! Map<String, dynamic>) return null;
-    final id = video['id'];
-    if (id is String && id.isNotEmpty) {
-      return id;
-    }
-    return null;
+    return VideoService.extractVideoId(video);
   }
 
   String? _extractPlayableVideoUrl(Map<String, dynamic> video) {
@@ -1101,14 +1098,19 @@ class _FeedVideoPageState extends State<_FeedVideoPage> {
   }
 
   String? _extractVideoId(Map<String, dynamic> video) {
-    final id = video['id'];
-    if (id is String && id.isNotEmpty) {
-      return id;
-    }
-    return null;
+    return VideoService.extractVideoId(video);
   }
 
   String? get _videoId => _extractVideoId(widget.video);
+
+  String? get _videoOwnerId => _readNonEmptyString(<String>[
+        'user_id',
+        'author_id',
+        'user.id',
+        'user.user_id',
+        'author.id',
+        'author.user_id',
+      ]);
 
   dynamic _readValueForPath(String path) {
     final segments = path.split('.');
@@ -1489,7 +1491,13 @@ class _FeedVideoPageState extends State<_FeedVideoPage> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (BuildContext context) => CommentSheet(videoId: videoId),
+      builder: (BuildContext context) => ChangeNotifierProvider(
+        create: (_) => CommentProvider(
+          videoId: videoId,
+          videoOwnerId: _videoOwnerId,
+        ),
+        child: const CommentSheet(),
+      ),
     );
 
     if (updatedCommentsCount != null && mounted) {

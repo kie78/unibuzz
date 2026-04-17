@@ -736,14 +736,22 @@ class AuthService {
     throw Exception(lastErrorMessage ?? 'Unable to update profile.');
   }
 
+  static Future<String?> getCachedEmail() async {
+    final email = await _storage.read(key: _profileEmailKey);
+    return (email != null && email.trim().isNotEmpty) ? email.trim() : null;
+  }
+
+  static bool isUniversityEmail(String email) =>
+      email.toLowerCase().endsWith('@std.must.ac.ug');
+
   static Future<Map<String, dynamic>> register({
     required String fullName,
     required String username,
     required String email,
     required String password,
-    required String universityName,
-    required String course,
-    required int yearOfStudy,
+    String universityName = '',
+    String course = '',
+    int yearOfStudy = 0,
   }) async {
     final response = await _safePost(
       '/auth/register',

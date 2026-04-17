@@ -63,6 +63,33 @@ class VideoService {
     return null;
   }
 
+  static String? extractVideoId(dynamic payload) {
+    if (payload is! Map) {
+      if (payload is String) {
+        final value = payload.trim();
+        return value.isEmpty ? null : value;
+      }
+      return null;
+    }
+
+    for (final key in <String>['id', 'video_id']) {
+      final value = payload[key];
+      if (value is String && value.trim().isNotEmpty) {
+        return value.trim();
+      }
+    }
+
+    for (final nestedKey in <String>['data', 'video', 'result']) {
+      final nested = payload[nestedKey];
+      final nestedId = extractVideoId(nested);
+      if (nestedId != null) {
+        return nestedId;
+      }
+    }
+
+    return null;
+  }
+
   static String? _extractSourceUrlFromPayload(dynamic payload) {
     if (payload is! Map) {
       return null;
@@ -131,12 +158,17 @@ class VideoService {
         return item;
       }
       final video = Map<String, dynamic>.from(item);
+      final canonicalId = extractVideoId(video);
+      if (canonicalId != null) {
+        video['id'] = canonicalId;
+      }
       if (video['video_url'] is String) {
         video['video_url'] = _applyCloudinaryTransforms(video['video_url']);
       }
       if (video['thumbnail_url'] is String) {
-        video['thumbnail_url'] =
-            _applyCloudinaryTransforms(video['thumbnail_url']);
+        video['thumbnail_url'] = _applyCloudinaryTransforms(
+          video['thumbnail_url'],
+        );
       }
       return video;
     }).toList();
@@ -146,13 +178,19 @@ class VideoService {
     Map<String, dynamic> response,
   ) {
     final processed = Map<String, dynamic>.from(response);
+    final canonicalId = extractVideoId(processed);
+    if (canonicalId != null) {
+      processed['id'] = canonicalId;
+    }
     if (processed['video_url'] is String) {
-      processed['video_url'] =
-          _applyCloudinaryTransforms(processed['video_url']);
+      processed['video_url'] = _applyCloudinaryTransforms(
+        processed['video_url'],
+      );
     }
     if (processed['thumbnail_url'] is String) {
-      processed['thumbnail_url'] =
-          _applyCloudinaryTransforms(processed['thumbnail_url']);
+      processed['thumbnail_url'] = _applyCloudinaryTransforms(
+        processed['thumbnail_url'],
+      );
     }
     return processed;
   }
@@ -209,7 +247,9 @@ class VideoService {
       }
       return <String, dynamic>{'data': data};
     }
-    throw Exception(_extractErrorMessage(decoded: data, statusCode: statusCode));
+    throw Exception(
+      _extractErrorMessage(decoded: data, statusCode: statusCode),
+    );
   }
 
   /// GET /api/feed
@@ -493,6 +533,16 @@ class VideoService {
     final response = await _dio.post<dynamic>(
       '/api/me/comment-filters',
       data: <String, String>{'keyword': keyword.trim()},
+    );
+    return _processResponse(response);
+  }
+
+  /// PATCH /api/videos/:video_id/comments/toggle
+  static Future<Map<String, dynamic>> toggleComments({
+    required String videoId,
+  }) async {
+    final response = await _dio.patch<dynamic>(
+      '/api/videos/$videoId/comments/toggle',
     );
     return _processResponse(response);
   }

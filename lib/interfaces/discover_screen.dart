@@ -113,10 +113,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   }
 
   String? _extractVideoId(Map<String, dynamic> video) {
-    final id = video['id'];
-    if (id == null) return null;
-    final value = id.toString().trim();
-    return value.isEmpty ? null : value;
+    return VideoService.extractVideoId(video);
   }
 
   List<Map<String, dynamic>> _normalizeResults(List<dynamic> rawResults) {
