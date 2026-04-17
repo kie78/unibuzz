@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:unibuzz/services/auth_service.dart';
+import 'package:unibuzz/services/error_helper.dart';
 import 'package:unibuzz/services/video_service.dart';
 
 class Comment {
@@ -72,8 +73,7 @@ class CommentProvider extends ChangeNotifier {
 
     try {
       _currentUserId ??= await AuthService.getCurrentUserId();
-      final response =
-          await VideoService.getCommentsResponse(videoId: videoId);
+      final response = await VideoService.getCommentsResponse(videoId: videoId);
 
       _comments = response.comments.map<Comment>((dynamic item) {
         if (item is Map<String, dynamic>) {
@@ -81,8 +81,7 @@ class CommentProvider extends ChangeNotifier {
           final text = item['content']?.toString() ?? '';
           final userId = item['user_id']?.toString() ?? '';
           final rawUsername = item['username']?.toString();
-          final isOwn =
-              _currentUserId != null && userId == _currentUserId;
+          final isOwn = _currentUserId != null && userId == _currentUserId;
 
           String displayName;
           if (isOwn) {
@@ -93,7 +92,12 @@ class CommentProvider extends ChangeNotifier {
             displayName = 'User';
           }
 
-          return Comment(id: id, username: displayName, text: text, isOwn: isOwn);
+          return Comment(
+            id: id,
+            username: displayName,
+            text: text,
+            isOwn: isOwn,
+          );
         }
         return Comment(
           id: UniqueKey().toString(),
@@ -108,7 +112,7 @@ class CommentProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     } catch (e) {
-      _error = e.toString().replaceFirst('Exception: ', '');
+      _error = friendlyError(e);
       _isLoading = false;
       notifyListeners();
     }
@@ -132,7 +136,7 @@ class CommentProvider extends ChangeNotifier {
       return null;
     } catch (e) {
       _isSubmitting = false;
-      final msg = e.toString().replaceFirst('Exception: ', '');
+      final msg = friendlyError(e);
       notifyListeners();
       return msg;
     }
@@ -156,7 +160,7 @@ class CommentProvider extends ChangeNotifier {
       return null;
     } catch (e) {
       _isSubmitting = false;
-      final msg = e.toString().replaceFirst('Exception: ', '');
+      final msg = friendlyError(e);
       notifyListeners();
       return msg;
     }
@@ -171,7 +175,7 @@ class CommentProvider extends ChangeNotifier {
       await loadComments();
       return null;
     } catch (e) {
-      final msg = e.toString().replaceFirst('Exception: ', '');
+      final msg = friendlyError(e);
       notifyListeners();
       return msg;
     }
@@ -181,7 +185,8 @@ class CommentProvider extends ChangeNotifier {
   Future<String?> toggleComments() async {
     try {
       final result = await VideoService.toggleComments(videoId: videoId);
-      _commentsDisabled = result['comments_disabled'] as bool? ?? _commentsDisabled;
+      _commentsDisabled =
+          result['comments_disabled'] as bool? ?? _commentsDisabled;
       if (_commentsDisabled) _editingCommentId = null;
       _successMessage = _commentsDisabled
           ? 'Comments disabled for this video.'
@@ -189,7 +194,7 @@ class CommentProvider extends ChangeNotifier {
       notifyListeners();
       return null;
     } catch (e) {
-      final msg = e.toString().replaceFirst('Exception: ', '');
+      final msg = friendlyError(e);
       notifyListeners();
       return msg;
     }

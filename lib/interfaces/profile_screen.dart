@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:unibuzz/services/auth_service.dart';
+import 'package:unibuzz/services/error_helper.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -353,7 +354,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       setState(() {
         _isLoadingProfile = false;
-        _profileError = _exceptionText(error);
+        _profileError = friendlyError(error);
       });
     }
   }
@@ -486,15 +487,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _isUpdatingAvatar = false;
         });
 
-        final message = _exceptionText(error);
+        final message = friendlyError(error);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              message.isEmpty
-                  ? 'Could not update profile photo. Please try again.'
-                  : message,
-            ),
-          ),
+          SnackBar(content: Text(message)),
         );
       }
     } catch (_) {

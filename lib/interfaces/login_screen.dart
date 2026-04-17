@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:unibuzz/interfaces/signup_screen.dart';
 import 'package:unibuzz/main.dart';
 import 'package:unibuzz/services/auth_service.dart';
+import 'package:unibuzz/services/error_helper.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -54,10 +55,12 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
     } catch (e) {
-      String error = e.toString().replaceFirst('Exception: ', '');
+      final error = friendlyError(e);
       setState(() {
         _isLoading = false;
-        if (error.toLowerCase().contains('invalid') || error.toLowerCase().contains('credentials')) {
+        if (error.toLowerCase().contains('invalid email or password') ||
+            error.toLowerCase().contains('invalid') ||
+            error.toLowerCase().contains('credentials')) {
           _emailError = 'Invalid email or password';
           _passwordError = 'Invalid email or password';
         } else {

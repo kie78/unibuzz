@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:unibuzz/services/error_helper.dart';
 import 'package:unibuzz/services/video_service.dart';
 
 class CommentFiltersProvider extends ChangeNotifier {
@@ -27,7 +28,7 @@ class CommentFiltersProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     } catch (e) {
-      _error = e.toString().replaceFirst('Exception: ', '');
+      _error = friendlyError(e);
       _isLoading = false;
       notifyListeners();
     }
@@ -48,11 +49,15 @@ class CommentFiltersProvider extends ChangeNotifier {
       return null;
     } catch (e) {
       _isAddingFilter = false;
-      String msg = e.toString().replaceFirst('Exception: ', '').trim();
-      if (msg.contains('already exists')) {
+      final raw = e.toString().replaceFirst('Exception: ', '').trim();
+      final String msg;
+      if (raw.toLowerCase().contains('already exists')) {
         msg = 'This keyword is already in your filter list.';
-      } else if (msg.contains('50') || msg.contains('maximum')) {
+      } else if (raw.toLowerCase().contains('50') ||
+          raw.toLowerCase().contains('maximum')) {
         msg = 'You have reached the maximum of 50 filter keywords.';
+      } else {
+        msg = friendlyError(e);
       }
       notifyListeners();
       return msg;
@@ -66,7 +71,7 @@ class CommentFiltersProvider extends ChangeNotifier {
       await loadFilters();
       return null;
     } catch (e) {
-      final msg = e.toString().replaceFirst('Exception: ', '');
+      final msg = friendlyError(e);
       notifyListeners();
       return msg;
     }

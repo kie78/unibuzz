@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:unibuzz/app_colors.dart';
 import 'package:unibuzz/interfaces/edit_post_screen.dart';
 import 'package:unibuzz/interfaces/full_screen_view.dart';
+import 'package:unibuzz/services/error_helper.dart';
 import 'package:unibuzz/services/video_service.dart';
 
 class MyPostsScreen extends StatefulWidget {
@@ -20,10 +21,6 @@ class _MyPostsScreenState extends State<MyPostsScreen> {
   void initState() {
     super.initState();
     _loadMyPosts();
-  }
-
-  String _exceptionText(Object error) {
-    return error.toString().replaceFirst('Exception: ', '').trim();
   }
 
   String? _readNonEmptyString(Map<String, dynamic> data, List<String> keys) {
@@ -124,7 +121,7 @@ class _MyPostsScreenState extends State<MyPostsScreen> {
       });
     } catch (error) {
       if (!mounted) return;
-      final String message = _exceptionText(error);
+      final String message = friendlyError(error);
       if (!showLoading && _posts.isNotEmpty) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(message)));

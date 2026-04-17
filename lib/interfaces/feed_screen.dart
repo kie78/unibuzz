@@ -9,6 +9,7 @@ import 'package:unibuzz/interfaces/comment_section.dart';
 import 'package:unibuzz/providers/comment_provider.dart';
 import 'package:unibuzz/interfaces/report_screen.dart';
 import 'package:unibuzz/services/auth_service.dart';
+import 'package:unibuzz/services/error_helper.dart';
 import 'package:unibuzz/services/feed_cache_service.dart';
 import 'package:unibuzz/services/pending_upload_tracker_service.dart';
 import 'package:unibuzz/services/video_player_pool_service.dart';
@@ -324,7 +325,7 @@ class FeedScreenState extends State<FeedScreen> with WidgetsBindingObserver {
     } catch (error) {
       if (!mounted) return;
 
-      final message = error.toString().replaceFirst('Exception: ', '').trim();
+      final message = friendlyError(error);
       if ((preserveExisting || showedCachedFeed) && _videos.isNotEmpty) {
         ScaffoldMessenger.of(
           context,
@@ -1104,13 +1105,13 @@ class _FeedVideoPageState extends State<_FeedVideoPage> {
   String? get _videoId => _extractVideoId(widget.video);
 
   String? get _videoOwnerId => _readNonEmptyString(<String>[
-        'user_id',
-        'author_id',
-        'user.id',
-        'user.user_id',
-        'author.id',
-        'author.user_id',
-      ]);
+    'user_id',
+    'author_id',
+    'user.id',
+    'user.user_id',
+    'author.id',
+    'author.user_id',
+  ]);
 
   dynamic _readValueForPath(String path) {
     final segments = path.split('.');
@@ -1429,11 +1430,9 @@ class _FeedVideoPageState extends State<_FeedVideoPage> {
         _voteState = previousState;
         _upvotes = previousUpvotes;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error.toString().replaceFirst('Exception: ', '')),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(friendlyError(error))));
     }
   }
 
@@ -1470,11 +1469,9 @@ class _FeedVideoPageState extends State<_FeedVideoPage> {
         _voteState = previousState;
         _upvotes = previousUpvotes;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error.toString().replaceFirst('Exception: ', '')),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(friendlyError(error))));
     }
   }
 
@@ -1492,10 +1489,8 @@ class _FeedVideoPageState extends State<_FeedVideoPage> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (BuildContext context) => ChangeNotifierProvider(
-        create: (_) => CommentProvider(
-          videoId: videoId,
-          videoOwnerId: _videoOwnerId,
-        ),
+        create: (_) =>
+            CommentProvider(videoId: videoId, videoOwnerId: _videoOwnerId),
         child: const CommentSheet(),
       ),
     );

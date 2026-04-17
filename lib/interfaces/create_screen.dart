@@ -4,6 +4,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:unibuzz/interfaces/video_upload_screen.dart';
+import 'package:unibuzz/services/error_helper.dart';
 
 class CreateScreen extends StatefulWidget {
   const CreateScreen({super.key, this.onUploadSuccess});
@@ -123,7 +124,7 @@ class _CreateScreenState extends State<CreateScreen> {
       setState(() {
         _isInitializingCamera = false;
       });
-      _showToast('Camera initialization failed: $error');
+      _showToast('Camera initialization failed: ${friendlyError(error)}');
       return false;
     }
   }
@@ -321,7 +322,7 @@ class _CreateScreenState extends State<CreateScreen> {
       );
     } catch (error) {
       if (!mounted) return;
-      _showToast('Unable to access gallery: $error');
+      _showToast('Unable to access gallery: ${friendlyError(error)}');
     }
   }
 
@@ -356,7 +357,7 @@ class _CreateScreenState extends State<CreateScreen> {
       );
     } catch (error) {
       if (!mounted) return;
-      _showToast('Unable to open publish flow: $error');
+      _showToast('Unable to open publish flow: ${friendlyError(error)}');
     }
   }
 

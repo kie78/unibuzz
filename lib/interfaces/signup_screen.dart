@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:unibuzz/main.dart';
 import 'package:unibuzz/services/auth_service.dart';
+import 'package:unibuzz/services/error_helper.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -92,7 +93,7 @@ class _SignupScreenState extends State<SignupScreen> {
       }
     } catch (e) {
       setState(() {
-        _signupError = e.toString().replaceFirst('Exception: ', '');
+        _signupError = friendlyError(e);
         _isLoading = false;
       });
     }

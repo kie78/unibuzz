@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:unibuzz/services/error_helper.dart';
 import 'package:unibuzz/services/pending_upload_tracker_service.dart';
 import 'package:unibuzz/services/video_service.dart';
 import 'package:dio/dio.dart';
@@ -836,7 +837,7 @@ class _PublishScreenState extends State<PublishScreen> {
 
       if (!mounted) return;
 
-      final message = _exceptionText(error);
+      final message = friendlyError(error);
       setState(() {
         _isUploading = false;
         _isProcessingQueuedVideo = false;
